@@ -8,6 +8,17 @@ type InventoryItem = {
   imageSrc: string
 }
 
+function getUserId(): string {
+  const tgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id
+  if (typeof tgId === 'number' && Number.isFinite(tgId)) return String(tgId)
+  let anon = localStorage.getItem('anon_user_id')
+  if (!anon) {
+    anon = crypto.randomUUID()
+    localStorage.setItem('anon_user_id', anon)
+  }
+  return `anon_${anon}`
+}
+
 function ChromaKeyImage({
   src,
   alt,
@@ -286,15 +297,50 @@ function App() {
   const [isExploding, setIsExploding] = useState(false)
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [didRewardThisOpen, setDidRewardThisOpen] = useState(false)
+  const userId = useMemo(() => getUserId(), [])
 
   useEffect(() => {
     if (!isPackOpen) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsPackOpen(false)
+      if (e.key === 'Escape') {
+        setIsPackOpen(false)
+        setTab('home')
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isPackOpen])
+
+  useEffect(() => {
+    // ensure DB schema + seed exists (safe to call multiple times)
+    fetch('/api/setup', { method: 'POST' }).catch(() => {})
+  }, [])
+
+  const loadInventory = async () => {
+    try {
+      const r = await fetch(`/api/inventory?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) return
+      const data = (await r.json()) as { items: { card_id: string; name: string; image_src: string; qty: number }[] }
+      const flattened: InventoryItem[] = []
+      for (const it of data.items ?? []) {
+        for (let i = 0; i < (it.qty ?? 1); i++) {
+          flattened.push({
+            id: `${it.card_id}_${i}_${Math.random().toString(16).slice(2)}`,
+            name: it.name,
+            imageSrc: it.image_src,
+          })
+        }
+      }
+      setInventory(flattened)
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    void loadInventory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   useEffect(() => {
     if (!isPackOpen) {
@@ -315,10 +361,13 @@ function App() {
     if (packClicks < 2) return
     if (didRewardThisOpen) return
     setDidRewardThisOpen(true)
-    setInventory((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), name: 'Красная Роза', imageSrc: '/card-rose.png' },
-    ])
+    fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId, cardId: 'rose_red', qty: 1 }),
+    })
+      .then(() => loadInventory())
+      .catch(() => {})
   }, [didRewardThisOpen, isPackOpen, packClicks])
 
   const title = useMemo(() => {
@@ -392,63 +441,47 @@ function App() {
           className="packModalOverlay"
           role="presentation"
           onClick={() => {
-            if (packClicks >= 2) setIsPackOpen(false)
+            if (packClicks >= 2 && !isExploding) {
+              setIsPackOpen(false)
+              setTab('home')
+            }
           }}
         >
-          <div
-            className="packModal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Стикерпак"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="packModalClose"
-              aria-label="Закрыть"
-              onClick={() => setIsPackOpen(false)}
-            >
-              ×
-            </button>
-            <div className="packGlow">
-              {packClicks < 2 || isExploding ? (
-                <button
-                  type="button"
-                  className={
-                    isExploding
-                      ? 'packInteractive packExplode'
-                      : packClicks > 0
-                        ? 'packInteractive packShake2'
-                        : 'packInteractive'
-                  }
-                  aria-label="Открыть пакетик"
-                  onClick={() => {
-                    if (isExploding) return
-                    setPackClicks((c) => Math.min(2, c + 1))
-                  }}
-                >
-                  {isExploding && (
-                    <div className="confetti" aria-hidden="true">
-                      {Array.from({ length: 22 }).map((_, i) => (
-                        <span key={i} className="confettiPiece" style={{ ['--i' as any]: i }} />
-                      ))}
-                    </div>
-                  )}
-                  <PackIcon className="packGlowIcon" />
-                </button>
-              ) : (
-                <div className="rewardCard" aria-label="Карточка">
-                  <div className="rewardIconFrame" aria-hidden="true">
-                    <ChromaKeyImage
-                      className="rewardIcon"
-                      src="/card-rose.png"
-                      alt="Красная роза"
-                    />
+          <div className="packStage" role="dialog" aria-modal="true" aria-label="Стикерпак">
+            {packClicks < 2 || isExploding ? (
+              <button
+                type="button"
+                className={
+                  isExploding
+                    ? 'packInteractive packExplode'
+                    : packClicks > 0
+                      ? 'packInteractive packShake2'
+                      : 'packInteractive'
+                }
+                aria-label="Открыть пакетик"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (isExploding) return
+                  setPackClicks((c) => Math.min(2, c + 1))
+                }}
+              >
+                {isExploding && (
+                  <div className="confetti" aria-hidden="true">
+                    {Array.from({ length: 22 }).map((_, i) => (
+                      <span key={i} className="confettiPiece" style={{ ['--i' as any]: i }} />
+                    ))}
                   </div>
-                  <div className="rewardName">Красная Роза</div>
+                )}
+                <PackIcon className="packGlowIcon" />
+              </button>
+            ) : (
+              <div className="rewardCard" aria-label="Карточка" onClick={(e) => e.stopPropagation()}>
+                <div className="rewardIconFrame" aria-hidden="true">
+                  <ChromaKeyImage className="rewardIcon" src="/card-rose.png" alt="Красная роза" />
                 </div>
-              )}
-            </div>
+                <div className="rewardName">Красная Роза</div>
+              </div>
+            )}
           </div>
         </div>
       )}
