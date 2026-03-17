@@ -10,6 +10,8 @@ declare global {
         ready: () => void
         expand: () => void
         isExpanded?: boolean
+        disableVerticalSwipes?: () => void
+        requestFullscreen?: () => void
         initDataUnsafe?: {
           user?: { id?: number }
         }
@@ -23,6 +25,8 @@ try {
   if (wa) {
     wa.ready()
     wa.expand()
+    wa.disableVerticalSwipes?.()
+    wa.requestFullscreen?.()
   }
 } catch {
   // no-op outside Telegram

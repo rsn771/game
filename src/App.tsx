@@ -19,6 +19,34 @@ function getUserId(): string {
   return `anon_${anon}`
 }
 
+type LocalInventory = Record<string, number>
+
+function loadLocalInventory(userId: string): LocalInventory {
+  try {
+    const raw = localStorage.getItem(`inventory_${userId}`)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return {}
+    return parsed as LocalInventory
+  } catch {
+    return {}
+  }
+}
+
+function saveLocalInventory(userId: string, inv: LocalInventory) {
+  try {
+    localStorage.setItem(`inventory_${userId}`, JSON.stringify(inv))
+  } catch {
+    // ignore
+  }
+}
+
+function upsertLocalCard(userId: string, cardId: string, qty: number) {
+  const inv = loadLocalInventory(userId)
+  inv[cardId] = (inv[cardId] ?? 0) + qty
+  saveLocalInventory(userId, inv)
+}
+
 function ChromaKeyImage({
   src,
   alt,
@@ -319,22 +347,39 @@ function App() {
   const loadInventory = async () => {
     try {
       const r = await fetch(`/api/inventory?userId=${encodeURIComponent(userId)}`)
-      if (!r.ok) return
-      const data = (await r.json()) as { items: { card_id: string; name: string; image_src: string; qty: number }[] }
-      const flattened: InventoryItem[] = []
-      for (const it of data.items ?? []) {
-        for (let i = 0; i < (it.qty ?? 1); i++) {
-          flattened.push({
-            id: `${it.card_id}_${i}_${Math.random().toString(16).slice(2)}`,
-            name: it.name,
-            imageSrc: it.image_src,
-          })
+      if (r.ok) {
+        const data = (await r.json()) as {
+          items: { card_id: string; name: string; image_src: string; qty: number }[]
         }
+        const flattened: InventoryItem[] = []
+        for (const it of data.items ?? []) {
+          for (let i = 0; i < (it.qty ?? 1); i++) {
+            flattened.push({
+              id: `${it.card_id}_${i}_${Math.random().toString(16).slice(2)}`,
+              name: it.name,
+              imageSrc: it.image_src,
+            })
+          }
+        }
+        setInventory(flattened)
+        return
       }
-      setInventory(flattened)
     } catch {
       // ignore
     }
+
+    // fallback (no DB configured / API failing)
+    const local = loadLocalInventory(userId)
+    const roseQty = local['rose_red'] ?? 0
+    const flattened: InventoryItem[] = []
+    for (let i = 0; i < roseQty; i++) {
+      flattened.push({
+        id: `rose_red_${i}_${Math.random().toString(16).slice(2)}`,
+        name: 'Красная Роза',
+        imageSrc: '/card-rose.png',
+      })
+    }
+    setInventory(flattened)
   }
 
   useEffect(() => {
@@ -361,6 +406,8 @@ function App() {
     if (packClicks < 2) return
     if (didRewardThisOpen) return
     setDidRewardThisOpen(true)
+    // optimistic local save (guaranteed persistence)
+    upsertLocalCard(userId, 'rose_red', 1)
     fetch('/api/inventory', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
