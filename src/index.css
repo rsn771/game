@@ -208,8 +208,14 @@ body {
   line-height: 1.5;
 }
 
+.inventoryHint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .inventoryGrid {
-  margin-top: 12px;
+  margin-top: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -222,6 +228,47 @@ body {
   padding: 10px;
   display: grid;
   gap: 8px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.inventoryCard:active {
+  cursor: grabbing;
+}
+
+.inventoryCardDragging {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.inventoryCardDropTarget {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15);
+}
+
+.inventoryDragGhost {
+  position: fixed;
+  width: min(40vw, 140px);
+  pointer-events: none;
+  z-index: 9998;
+  transform: translate(-50%, -50%);
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  background: rgba(0, 0, 0, 0.9);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.inventoryDragGhost .inventoryThumb {
+  border-radius: 14px;
+}
+
+.inventoryDragGhost .inventoryName {
+  font-size: 12px;
 }
 
 .inventoryThumb {

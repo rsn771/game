@@ -34,6 +34,30 @@ export default async function handler(req: Request): Promise<Response> {
         image_src = excluded.image_src;
   `
 
+  await sql`
+    insert into cards (id, name, image_src)
+    values ('rose_white', 'Белая Роза', '/card-rose-white.png')
+    on conflict (id) do update
+    set name = excluded.name,
+        image_src = excluded.image_src;
+  `
+
+  await sql`
+    insert into cards (id, name, image_src)
+    values ('rose_2red', '2 красные розы', '/card-rose-2red.png')
+    on conflict (id) do update
+    set name = excluded.name,
+        image_src = excluded.image_src;
+  `
+
+  await sql`
+    insert into cards (id, name, image_src)
+    values ('rose_bouquet', 'Букет красных роз', '/card-rose-bouquet.png')
+    on conflict (id) do update
+    set name = excluded.name,
+        image_src = excluded.image_src;
+  `
+
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })

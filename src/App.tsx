@@ -1,11 +1,40 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 type TabKey = 'home' | 'inventory' | 'customize'
 
+type CardDef = { id: string; name: string; imageSrc: string }
+
 type InventoryItem = {
   id: string
+  cardId: string
   name: string
   imageSrc: string
+}
+
+const PACK_CARDS: CardDef[] = [
+  { id: 'rose_red', name: 'Красная Роза', imageSrc: '/card-rose.png' },
+  { id: 'rose_white', name: 'Белая Роза', imageSrc: '/card-rose-white.png' },
+]
+
+const ALL_CARDS: CardDef[] = [
+  ...PACK_CARDS,
+  { id: 'rose_2red', name: '2 красные розы', imageSrc: '/card-rose-2red.png' },
+  { id: 'rose_bouquet', name: 'Букет красных роз', imageSrc: '/card-rose-bouquet.png' },
+]
+
+const MERGE_RESULTS: Record<string, string> = {
+  'rose_red|rose_red': 'rose_2red',
+  'rose_red|rose_2red': 'rose_bouquet',
+  'rose_2red|rose_red': 'rose_bouquet',
+}
+
+function pickRandomReward(): CardDef {
+  return PACK_CARDS[Math.random() < 0.5 ? 0 : 1]
+}
+
+function findMergeResult(a: string, b: string): string | null {
+  const key = [a, b].sort().join('|')
+  return MERGE_RESULTS[key] ?? null
 }
 
 function getUserId(): string {
@@ -44,6 +73,14 @@ function saveLocalInventory(userId: string, inv: LocalInventory) {
 function upsertLocalCard(userId: string, cardId: string, qty: number) {
   const inv = loadLocalInventory(userId)
   inv[cardId] = (inv[cardId] ?? 0) + qty
+  saveLocalInventory(userId, inv)
+}
+
+function removeLocalCard(userId: string, cardId: string, count: number) {
+  const inv = loadLocalInventory(userId)
+  const cur = inv[cardId] ?? 0
+  inv[cardId] = Math.max(0, cur - count)
+  if (inv[cardId] === 0) delete inv[cardId]
   saveLocalInventory(userId, inv)
 }
 
@@ -318,6 +355,186 @@ function Stickman() {
   )
 }
 
+const LONG_PRESS_MS = 280
+
+function InventoryPanel({
+  inventory,
+  userId,
+  onReload,
+}: {
+  inventory: InventoryItem[]
+  userId: string
+  onReload: () => void
+}) {
+  const [draggingItem, setDraggingItem] = useState<InventoryItem | null>(null)
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pointerIdRef = useRef<number | null>(null)
+  const gridRef = useRef<HTMLDivElement | null>(null)
+
+  const applyMerge = useCallback(
+    (cardA: string, cardB: string, resultId: string) => {
+      removeLocalCard(userId, cardA, 1)
+      removeLocalCard(userId, cardB, 1)
+      upsertLocalCard(userId, resultId, 1)
+      fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          merge: { from: [cardA, cardB], to: resultId },
+        }),
+      })
+        .then(() => onReload())
+        .catch(() => onReload())
+    },
+    [userId, onReload]
+  )
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent, item: InventoryItem) => {
+      if (draggingItem) return
+      e.currentTarget.setPointerCapture(e.pointerId)
+      pointerIdRef.current = e.pointerId
+      longPressRef.current = window.setTimeout(() => {
+        longPressRef.current = null
+        setDraggingItem(item)
+        setDragPos({ x: e.clientX, y: e.clientY })
+      }, LONG_PRESS_MS)
+    },
+    [draggingItem]
+  )
+
+  const handleGlobalPointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (!draggingItem || e.pointerId !== pointerIdRef.current) return
+      setDragPos({ x: e.clientX, y: e.clientY })
+      const el = document.elementFromPoint(e.clientX, e.clientY)
+      const card = el?.closest('[data-inventory-card-id]')
+      setDropTargetId(card?.getAttribute('data-inventory-card-id') ?? null)
+    },
+    [draggingItem]
+  )
+
+  const handleGlobalPointerUp = useCallback(
+    (e: PointerEvent) => {
+      if (e.pointerId !== pointerIdRef.current) return
+      if (longPressRef.current) {
+        clearTimeout(longPressRef.current)
+        longPressRef.current = null
+      }
+      pointerIdRef.current = null
+      if (!draggingItem) return
+      const targetId = dropTargetId
+      const src = draggingItem
+      setDraggingItem(null)
+      setDropTargetId(null)
+      if (!targetId || targetId === src.id) return
+      const targetItem = inventory.find((i) => i.id === targetId)
+      if (!targetItem) return
+      const result = findMergeResult(src.cardId, targetItem.cardId)
+      if (!result) return
+      applyMerge(src.cardId, targetItem.cardId, result)
+    },
+    [draggingItem, dropTargetId, inventory, applyMerge]
+  )
+
+  useEffect(() => {
+    if (!draggingItem) return
+    document.addEventListener('pointermove', handleGlobalPointerMove)
+    document.addEventListener('pointerup', handleGlobalPointerUp)
+    document.addEventListener('pointercancel', handleGlobalPointerUp)
+    return () => {
+      document.removeEventListener('pointermove', handleGlobalPointerMove)
+      document.removeEventListener('pointerup', handleGlobalPointerUp)
+      document.removeEventListener('pointercancel', handleGlobalPointerUp)
+    }
+  }, [draggingItem, handleGlobalPointerMove, handleGlobalPointerUp])
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+    if (e.pointerId === pointerIdRef.current) {
+      e.currentTarget.releasePointerCapture?.(e.pointerId)
+    }
+  }, [])
+
+  const handlePointerCancel = useCallback(() => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+    setDraggingItem(null)
+    setDropTargetId(null)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (longPressRef.current) clearTimeout(longPressRef.current)
+    }
+  }, [])
+
+  if (inventory.length === 0) {
+    return (
+      <section className="panel">
+        <h2>Инвентарь</h2>
+        <p>Пока пусто.</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel">
+      <h2>Инвентарь</h2>
+      <p className="inventoryHint">Зажмите и перетащите на другой предмет для слияния</p>
+      <div ref={gridRef} className="inventoryGrid" role="list">
+        {inventory.map((item) => (
+          <div
+            key={item.id}
+            className={`inventoryCard ${draggingItem?.id === item.id ? 'inventoryCardDragging' : ''} ${dropTargetId === item.id ? 'inventoryCardDropTarget' : ''}`}
+            role="listitem"
+            data-inventory-card-id={item.id}
+            onPointerDown={(e) => handlePointerDown(e, item)}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerCancel}
+            onPointerCancel={handlePointerCancel}
+          >
+            <div className="inventoryThumb" aria-hidden="true">
+              <ChromaKeyImage
+                className="inventoryThumbImg"
+                src={item.imageSrc}
+                alt=""
+              />
+            </div>
+            <div className="inventoryName">{item.name}</div>
+          </div>
+        ))}
+      </div>
+      {draggingItem && (
+        <div
+          className="inventoryDragGhost"
+          style={{
+            left: dragPos.x,
+            top: dragPos.y,
+          }}
+        >
+          <div className="inventoryThumb">
+            <ChromaKeyImage
+              className="inventoryThumbImg"
+              src={draggingItem.imageSrc}
+              alt=""
+            />
+          </div>
+          <div className="inventoryName">{draggingItem.name}</div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function App() {
   const [tab, setTab] = useState<TabKey>('home')
   const [isPackOpen, setIsPackOpen] = useState(false)
@@ -325,6 +542,7 @@ function App() {
   const [isExploding, setIsExploding] = useState(false)
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [didRewardThisOpen, setDidRewardThisOpen] = useState(false)
+  const [rewardCard, setRewardCard] = useState<CardDef | null>(null)
   const userId = useMemo(() => getUserId(), [])
 
   useEffect(() => {
@@ -356,6 +574,7 @@ function App() {
           for (let i = 0; i < (it.qty ?? 1); i++) {
             flattened.push({
               id: `${it.card_id}_${i}_${Math.random().toString(16).slice(2)}`,
+              cardId: it.card_id,
               name: it.name,
               imageSrc: it.image_src,
             })
@@ -370,14 +589,17 @@ function App() {
 
     // fallback (no DB configured / API failing)
     const local = loadLocalInventory(userId)
-    const roseQty = local['rose_red'] ?? 0
     const flattened: InventoryItem[] = []
-    for (let i = 0; i < roseQty; i++) {
-      flattened.push({
-        id: `rose_red_${i}_${Math.random().toString(16).slice(2)}`,
-        name: 'Красная Роза',
-        imageSrc: '/card-rose.png',
-      })
+    for (const card of ALL_CARDS) {
+      const qty = local[card.id] ?? 0
+      for (let i = 0; i < qty; i++) {
+        flattened.push({
+          id: `${card.id}_${i}_${Math.random().toString(16).slice(2)}`,
+          cardId: card.id,
+          name: card.name,
+          imageSrc: card.imageSrc,
+        })
+      }
     }
     setInventory(flattened)
   }
@@ -392,6 +614,7 @@ function App() {
       setPackClicks(0)
       setIsExploding(false)
       setDidRewardThisOpen(false)
+      setRewardCard(null)
       return
     }
     if (packClicks === 2) {
@@ -406,12 +629,13 @@ function App() {
     if (packClicks < 2) return
     if (didRewardThisOpen) return
     setDidRewardThisOpen(true)
-    // optimistic local save (guaranteed persistence)
-    upsertLocalCard(userId, 'rose_red', 1)
+    const card = pickRandomReward()
+    setRewardCard(card)
+    upsertLocalCard(userId, card.id, 1)
     fetch('/api/inventory', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId, cardId: 'rose_red', qty: 1 }),
+      body: JSON.stringify({ userId, cardId: card.id, qty: 1 }),
     })
       .then(() => loadInventory())
       .catch(() => {})
@@ -452,27 +676,11 @@ function App() {
         )}
 
         {tab === 'inventory' && (
-          <section className="panel">
-            <h2>Инвентарь</h2>
-            {inventory.length === 0 ? (
-              <p>Пока пусто.</p>
-            ) : (
-              <div className="inventoryGrid" role="list">
-                {inventory.map((item) => (
-                  <div key={item.id} className="inventoryCard" role="listitem">
-                    <div className="inventoryThumb" aria-hidden="true">
-                      <ChromaKeyImage
-                        className="inventoryThumbImg"
-                        src={item.imageSrc}
-                        alt=""
-                      />
-                    </div>
-                    <div className="inventoryName">{item.name}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          <InventoryPanel
+            inventory={inventory}
+            userId={userId}
+            onReload={loadInventory}
+          />
         )}
 
         {tab === 'customize' && (
@@ -521,14 +729,14 @@ function App() {
                 )}
                 <PackIcon className="packGlowIcon" />
               </button>
-            ) : (
+            ) : rewardCard ? (
               <div className="rewardCard" aria-label="Карточка" onClick={(e) => e.stopPropagation()}>
                 <div className="rewardIconFrame" aria-hidden="true">
-                  <ChromaKeyImage className="rewardIcon" src="/card-rose.png" alt="Красная роза" />
+                  <ChromaKeyImage className="rewardIcon" src={rewardCard.imageSrc} alt={rewardCard.name} />
                 </div>
-                <div className="rewardName">Красная Роза</div>
+                <div className="rewardName">{rewardCard.name}</div>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       )}
