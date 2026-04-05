@@ -84,6 +84,32 @@ function removeLocalCard(userId: string, cardId: string, count: number) {
   saveLocalInventory(userId, inv)
 }
 
+type GardenState = (string | null)[]
+
+function loadGarden(userId: string): GardenState {
+  try {
+    const raw = localStorage.getItem(`garden_${userId}`)
+    if (!raw) return [null, null, null, null, null, null]
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return [null, null, null, null, null, null]
+    return Array.from({ length: 6 }, (_, i) =>
+      typeof parsed[i] === 'string' ? parsed[i] : null
+    )
+  } catch {
+    return [null, null, null, null, null, null]
+  }
+}
+
+function saveGarden(userId: string, garden: GardenState) {
+  try {
+    localStorage.setItem(`garden_${userId}`, JSON.stringify(garden))
+  } catch {
+    // ignore
+  }
+}
+
+const chromaKeyCache = new Map<string, string>()
+
 function ChromaKeyImage({
   src,
   alt,
@@ -93,9 +119,15 @@ function ChromaKeyImage({
   alt: string
   className?: string
 }) {
-  const [outSrc, setOutSrc] = useState<string | null>(null)
+  const cached = chromaKeyCache.get(src)
+  const [outSrc, setOutSrc] = useState<string | null>(cached ?? null)
 
   useEffect(() => {
+    const cached = chromaKeyCache.get(src)
+    if (cached) {
+      setOutSrc(cached)
+      return
+    }
     let cancelled = false
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -148,6 +180,7 @@ function ChromaKeyImage({
       }
       ctx.putImageData(imageData, 0, 0)
       const url = canvas.toDataURL('image/png')
+      chromaKeyCache.set(src, url)
       setOutSrc(url)
     }
     img.onerror = () => {
@@ -245,6 +278,35 @@ function PackIcon({ className }: { className?: string }) {
           strokeLinejoin="round"
           opacity="0.55"
         />
+      </g>
+    </svg>
+  )
+}
+
+function GardenIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <g stroke="currentColor" fill="none" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round">
+        {/* pot */}
+        <path d="M20 36 L24 52 L40 52 L44 36 Z" />
+        <path d="M22 36 L26 52 M42 36 L38 52" opacity="0.5" />
+        {/* flower stems + blooms */}
+        <path d="M28 36 V24 M36 36 V24" />
+        <circle cx="28" cy="20" r="6" />
+        <circle cx="36" cy="20" r="6" />
+        <circle cx="32" cy="14" r="5" opacity="0.9" />
+      </g>
+    </svg>
+  )
+}
+
+function PotIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 48 64" role="presentation" aria-hidden="true">
+      <g stroke="currentColor" fill="none" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
+        <path d="M12 24 L16 56 L32 56 L36 24 Z" />
+        <path d="M14 24 L18 56 M34 24 L30 56" opacity="0.4" />
+        <path d="M8 24 Q24 16 40 24" />
       </g>
     </svg>
   )
@@ -355,7 +417,8 @@ function Stickman() {
   )
 }
 
-const LONG_PRESS_MS = 280
+const LONG_PRESS_MS = 420
+const LONG_PRESS_MOVE_PX = 12
 
 function InventoryPanel({
   inventory,
@@ -367,10 +430,12 @@ function InventoryPanel({
   onReload: () => void
 }) {
   const [draggingItem, setDraggingItem] = useState<InventoryItem | null>(null)
-  const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pointerIdRef = useRef<number | null>(null)
+  const downPosRef = useRef({ x: 0, y: 0 })
+  const pointerPosRef = useRef({ x: 0, y: 0 })
+  const ghostRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
 
   const applyMerge = useCallback(
@@ -378,6 +443,7 @@ function InventoryPanel({
       removeLocalCard(userId, cardA, 1)
       removeLocalCard(userId, cardB, 1)
       upsertLocalCard(userId, resultId, 1)
+      onReload()
       fetch('/api/inventory', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -387,7 +453,7 @@ function InventoryPanel({
         }),
       })
         .then(() => onReload())
-        .catch(() => onReload())
+        .catch(() => {})
     },
     [userId, onReload]
   )
@@ -395,27 +461,64 @@ function InventoryPanel({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, item: InventoryItem) => {
       if (draggingItem) return
-      e.currentTarget.setPointerCapture(e.pointerId)
+      e.preventDefault()
+      downPosRef.current = { x: e.clientX, y: e.clientY }
+      pointerPosRef.current = { x: e.clientX, y: e.clientY }
       pointerIdRef.current = e.pointerId
+      e.currentTarget.setPointerCapture(e.pointerId)
       longPressRef.current = window.setTimeout(() => {
         longPressRef.current = null
+        lastDropTargetRef.current = null
+        setDropTargetId(null)
+        pointerPosRef.current = { x: downPosRef.current.x, y: downPosRef.current.y }
         setDraggingItem(item)
-        setDragPos({ x: e.clientX, y: e.clientY })
       }, LONG_PRESS_MS)
     },
     [draggingItem]
   )
 
+  const handlePointerMoveBeforeDrag = useCallback((e: React.PointerEvent) => {
+    pointerPosRef.current = { x: e.clientX, y: e.clientY }
+    if (!longPressRef.current) return
+    const dx = e.clientX - downPosRef.current.x
+    const dy = e.clientY - downPosRef.current.y
+    if (dx * dx + dy * dy > LONG_PRESS_MOVE_PX * LONG_PRESS_MOVE_PX) {
+      clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+  }, [])
+
+  const lastDropTargetRef = useRef<string | null>(null)
+
   const handleGlobalPointerMove = useCallback(
     (e: PointerEvent) => {
       if (!draggingItem || e.pointerId !== pointerIdRef.current) return
-      setDragPos({ x: e.clientX, y: e.clientY })
+      const g = ghostRef.current
+      if (g) {
+        g.style.left = `${e.clientX}px`
+        g.style.top = `${e.clientY}px`
+      }
       const el = document.elementFromPoint(e.clientX, e.clientY)
       const card = el?.closest('[data-inventory-card-id]')
-      setDropTargetId(card?.getAttribute('data-inventory-card-id') ?? null)
+      const next = card?.getAttribute('data-inventory-card-id') ?? null
+      if (next !== lastDropTargetRef.current) {
+        lastDropTargetRef.current = next
+        setDropTargetId(next)
+      }
     },
     [draggingItem]
   )
+
+  const handlePointerUpOrCancel = useCallback((e: React.PointerEvent) => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+    if (e.pointerId === pointerIdRef.current) {
+      e.currentTarget.releasePointerCapture?.(e.pointerId)
+      pointerIdRef.current = null
+    }
+  }, [])
 
   const handleGlobalPointerUp = useCallback(
     (e: PointerEvent) => {
@@ -425,6 +528,7 @@ function InventoryPanel({
         longPressRef.current = null
       }
       pointerIdRef.current = null
+      lastDropTargetRef.current = null
       if (!draggingItem) return
       const targetId = dropTargetId
       const src = draggingItem
@@ -451,16 +555,6 @@ function InventoryPanel({
       document.removeEventListener('pointercancel', handleGlobalPointerUp)
     }
   }, [draggingItem, handleGlobalPointerMove, handleGlobalPointerUp])
-
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current)
-      longPressRef.current = null
-    }
-    if (e.pointerId === pointerIdRef.current) {
-      e.currentTarget.releasePointerCapture?.(e.pointerId)
-    }
-  }, [])
 
   const handlePointerCancel = useCallback(() => {
     if (longPressRef.current) {
@@ -498,7 +592,8 @@ function InventoryPanel({
             role="listitem"
             data-inventory-card-id={item.id}
             onPointerDown={(e) => handlePointerDown(e, item)}
-            onPointerUp={handlePointerUp}
+            onPointerMove={handlePointerMoveBeforeDrag}
+            onPointerUp={handlePointerUpOrCancel}
             onPointerLeave={handlePointerCancel}
             onPointerCancel={handlePointerCancel}
           >
@@ -515,10 +610,11 @@ function InventoryPanel({
       </div>
       {draggingItem && (
         <div
+          ref={ghostRef}
           className="inventoryDragGhost"
           style={{
-            left: dragPos.x,
-            top: dragPos.y,
+            left: pointerPosRef.current.x,
+            top: pointerPosRef.current.y,
           }}
         >
           <div className="inventoryThumb">
@@ -533,6 +629,146 @@ function InventoryPanel({
       )}
     </section>
   )
+}
+
+function getPlantableCards(inventory: InventoryItem[]): { cardId: string; name: string; imageSrc: string }[] {
+  const seen = new Set<string>()
+  const out: { cardId: string; name: string; imageSrc: string }[] = []
+  for (const it of inventory) {
+    if (seen.has(it.cardId)) continue
+    seen.add(it.cardId)
+    out.push({ cardId: it.cardId, name: it.name, imageSrc: it.imageSrc })
+  }
+  return out
+}
+
+function GardenPanel({
+  inventory,
+  userId,
+  onReload,
+  onClose,
+}: {
+  inventory: InventoryItem[]
+  userId: string
+  onReload: () => void
+  onClose?: () => void
+}) {
+  const [garden, setGarden] = useState<GardenState>(() => loadGarden(userId))
+  const [pickerForPot, setPickerForPot] = useState<number | null>(null)
+
+  useEffect(() => {
+    setGarden(loadGarden(userId))
+  }, [userId])
+
+  const plantable = useMemo(() => {
+    const fromInv = getPlantableCards(inventory)
+    if (pickerForPot === null) return fromInv
+    const inPot = garden[pickerForPot]
+    if (!inPot) return fromInv
+    const card = getCardById(inPot)
+    if (!card || fromInv.some((p) => p.cardId === card.id)) return fromInv
+    return [...fromInv, { cardId: card.id, name: card.name, imageSrc: card.imageSrc }]
+  }, [inventory, pickerForPot, garden])
+
+  const handlePlant = useCallback(
+    (potIndex: number, cardId: string) => {
+      const next = [...garden]
+      const old = next[potIndex]
+      next[potIndex] = cardId
+      setGarden(next)
+      saveGarden(userId, next)
+      if (old) upsertLocalCard(userId, old, 1)
+      if (old !== cardId) removeLocalCard(userId, cardId, 1)
+      setPickerForPot(null)
+      onReload()
+    },
+    [garden, userId, onReload]
+  )
+
+  const handlePotClick = useCallback((index: number) => {
+    setPickerForPot(index)
+  }, [])
+
+  return (
+    <section className="panel gardenPanel">
+      <div className="gardenPanelHeader">
+        <h2>Сад</h2>
+        {onClose && (
+          <button type="button" className="gardenPanelClose" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+        )}
+      </div>
+      <p className="gardenHint">Нажмите на горшок, чтобы посадить цветок из инвентаря</p>
+      <div className="gardenGrid">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <button
+            key={i}
+            type="button"
+            className="gardenPot"
+            onClick={() => handlePotClick(i)}
+            aria-label={garden[i] ? `Горшок с ${getCardById(garden[i]!)?.name ?? 'цветком'}` : 'Пустой горшок'}
+          >
+            <div className="gardenPotShape">
+              <PotIcon />
+            </div>
+            {garden[i] ? (
+              <div className="gardenFlower gardenFlowerSway">
+                <ChromaKeyImage
+                  className="gardenFlowerImg"
+                  src={getCardById(garden[i]!)!.imageSrc}
+                  alt=""
+                />
+              </div>
+            ) : (
+              <div className="gardenPotEmpty">+</div>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {pickerForPot !== null && (
+        <div
+          className="flowerPickerOverlay"
+          onClick={() => setPickerForPot(null)}
+        >
+          <div className="flowerPicker" onClick={(e) => e.stopPropagation()}>
+            <h3>Выберите цветок</h3>
+            {plantable.length === 0 ? (
+              <p className="flowerPickerEmpty">Нет цветов в инвентаре</p>
+            ) : (
+              <div className="flowerPickerGrid">
+                {plantable.map((c) => (
+                  <button
+                    key={c.cardId}
+                    type="button"
+                    className="flowerPickerItem"
+                    onClick={() => handlePlant(pickerForPot, c.cardId)}
+                  >
+                    <div className="flowerPickerThumb">
+                      <ChromaKeyImage className="flowerPickerImg" src={c.imageSrc} alt="" />
+                    </div>
+                    <span className="flowerPickerName">{c.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className="flowerPickerCancel"
+              onClick={() => setPickerForPot(null)}
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function getCardById(id: string): CardDef | undefined {
+  return ALL_CARDS.find((c) => c.id === id)
 }
 
 function App() {
@@ -584,10 +820,10 @@ function App() {
         return
       }
     } catch {
-      // ignore
+      // API недоступен (localhost без backend) — используем localStorage
     }
 
-    // fallback (no DB configured / API failing)
+    // fallback (no DB / API failing)
     const local = loadLocalInventory(userId)
     const flattened: InventoryItem[] = []
     for (const card of ALL_CARDS) {
@@ -641,6 +877,8 @@ function App() {
       .catch(() => {})
   }, [didRewardThisOpen, isPackOpen, packClicks])
 
+  const [isGardenOpen, setIsGardenOpen] = useState(false)
+
   const title = useMemo(() => {
     switch (tab) {
       case 'home':
@@ -664,11 +902,17 @@ function App() {
             <Stickman />
             <button
               type="button"
+              className="edgeGardenButton"
+              aria-label="Сад"
+              onClick={() => setIsGardenOpen(true)}
+            >
+              <GardenIcon />
+            </button>
+            <button
+              type="button"
               className="edgePackButton"
               aria-label="Стикерпак"
-              onClick={() => {
-                setIsPackOpen(true)
-              }}
+              onClick={() => setIsPackOpen(true)}
             >
               <PackIcon />
             </button>
@@ -737,6 +981,22 @@ function App() {
                 <div className="rewardName">{rewardCard.name}</div>
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {isGardenOpen && (
+        <div
+          className="gardenModalOverlay"
+          onClick={() => setIsGardenOpen(false)}
+        >
+          <div className="gardenModalContent" onClick={(e) => e.stopPropagation()}>
+            <GardenPanel
+              inventory={inventory}
+              userId={userId}
+              onReload={loadInventory}
+              onClose={() => setIsGardenOpen(false)}
+            />
           </div>
         </div>
       )}

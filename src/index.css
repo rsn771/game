@@ -185,15 +185,22 @@ body {
   .stickman * {
     animation: none;
   }
+  .gardenFlowerSway {
+    animation: none;
+  }
 }
 
 .panel {
   width: 100%;
   max-width: 560px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 16px;
   background: rgba(255, 255, 255, 0.02);
+  -webkit-overflow-scrolling: touch;
 }
 
 .panel h2 {
@@ -295,6 +302,222 @@ body {
   font-weight: 600;
 }
 
+/* Garden */
+.gardenHint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gardenGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.gardenPot {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 140px;
+  cursor: pointer;
+  color: var(--fg);
+  position: relative;
+}
+
+.gardenPot:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gardenPotShape {
+  width: 48px;
+  height: 56px;
+  opacity: 0.85;
+}
+
+.gardenPotShape svg {
+  width: 100%;
+  height: 100%;
+}
+
+.gardenFlower {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+}
+
+.gardenFlowerImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.gardenFlowerSway {
+  animation: flower-sway 3s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+
+@keyframes flower-sway {
+  0%, 100% { transform: translateX(-50%) rotate(-3deg); }
+  50% { transform: translateX(-50%) rotate(3deg); }
+}
+
+.gardenPotEmpty {
+  position: absolute;
+  bottom: 42px;
+  font-size: 24px;
+  opacity: 0.35;
+}
+
+.flowerPickerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+
+.flowerPicker {
+  width: min(92vw, 400px);
+  max-height: 70vh;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.flowerPicker h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.flowerPickerGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.flowerPickerItem {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.flowerPickerItem:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.flowerPickerThumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.flowerPickerImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.flowerPickerName {
+  font-size: 12px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.flowerPickerEmpty {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.flowerPickerCancel {
+  margin-top: 16px;
+  width: 100%;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--btn-bg);
+  color: var(--muted);
+  padding: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.flowerPickerCancel:hover {
+  background: var(--btn-bg-hover);
+}
+
+.gardenModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+
+.gardenModalContent {
+  width: min(92vw, 480px);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.gardenPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.gardenPanelHeader h2 {
+  margin: 0;
+}
+
+.gardenPanelClose {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.gardenPanelClose:hover {
+  color: var(--fg);
+}
+
 .tabbar {
   position: fixed;
   left: 0;
@@ -339,6 +562,40 @@ body {
   color: var(--fg);
   background: var(--btn-bg-active);
   border-color: var(--line-strong);
+}
+
+.edgeGardenButton {
+  position: fixed;
+  right: 12px;
+  top: calc(50% - 80px);
+  transform: translateY(-50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.edgeGardenButton:hover {
+  background: transparent;
+}
+
+.edgeGardenButton:active {
+  transform: translateY(-50%) scale(0.97);
+}
+
+.edgeGardenButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.edgeGardenButton svg {
+  width: 48px;
+  height: 48px;
 }
 
 .edgePackButton {
