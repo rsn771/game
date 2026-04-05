@@ -1,0 +1,54 @@
+<svg width="1200" height="1600" viewBox="0 0 1200 1600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="1600" fill="#E7D8C7"/>
+  <rect width="1200" height="1080" fill="url(#wall)"/>
+  <rect y="1080" width="1200" height="520" fill="url(#floor)"/>
+  <rect x="126" y="176" width="948" height="554" rx="28" fill="#FAF5EE"/>
+  <rect x="150" y="198" width="900" height="510" rx="20" fill="url(#windowSky)"/>
+  <rect x="198" y="250" width="182" height="410" fill="#EED7B8"/>
+  <rect x="406" y="250" width="182" height="410" fill="#EED7B8"/>
+  <rect x="614" y="250" width="182" height="410" fill="#EED7B8"/>
+  <rect x="822" y="250" width="182" height="410" fill="#EED7B8"/>
+  <rect x="378" y="198" width="18" height="510" fill="#F8F4EE"/>
+  <rect x="586" y="198" width="18" height="510" fill="#F8F4EE"/>
+  <rect x="794" y="198" width="18" height="510" fill="#F8F4EE"/>
+  <rect x="150" y="630" width="900" height="78" fill="url(#windowLedge)"/>
+  <circle cx="878" cy="290" r="90" fill="#FFF2C4" opacity="0.7"/>
+  <path d="M90 910C90 866.922 124.922 832 168 832H1032C1075.08 832 1110 866.922 1110 910V1168H90V910Z" fill="#D8C1A6"/>
+  <rect x="186" y="844" width="430" height="266" rx="72" fill="#C77C5D"/>
+  <rect x="218" y="886" width="364" height="124" rx="52" fill="#D79274"/>
+  <rect x="264" y="782" width="88" height="98" rx="24" fill="#E4B389"/>
+  <rect x="452" y="782" width="88" height="98" rx="24" fill="#E4B389"/>
+  <rect x="718" y="872" width="156" height="268" rx="18" fill="#8B5E3B"/>
+  <rect x="750" y="760" width="92" height="132" rx="14" fill="#EEDCCB"/>
+  <rect x="764" y="678" width="64" height="92" rx="32" fill="#EFE6D6"/>
+  <rect x="748" y="946" width="94" height="18" rx="9" fill="#6A472F"/>
+  <rect x="748" y="996" width="94" height="18" rx="9" fill="#6A472F"/>
+  <path d="M942 790C942 748.026 976.026 714 1018 714H1034C1075.97 714 1110 748.026 1110 790V1120H942V790Z" fill="#EEE4D7"/>
+  <path d="M1006 704H1044C1062.78 704 1078 719.222 1078 738V764H972V738C972 719.222 987.222 704 1006 704Z" fill="#F7F0E7"/>
+  <rect x="964" y="764" width="124" height="18" rx="9" fill="#E6D7C5"/>
+  <rect x="84" y="1030" width="1032" height="38" fill="#C4A380"/>
+  <rect x="92" y="1174" width="1016" height="32" fill="#F1E7D8" opacity="0.4"/>
+  <rect x="920" y="1028" width="122" height="208" rx="22" fill="#6E8F54"/>
+  <ellipse cx="982" cy="968" rx="86" ry="118" fill="#7AA15D"/>
+  <ellipse cx="948" cy="1014" rx="56" ry="74" fill="#88B36A"/>
+  <ellipse cx="1020" cy="1018" rx="58" ry="78" fill="#648A49"/>
+  <defs>
+    <linearGradient id="wall" x1="600" y1="0" x2="600" y2="1080" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0E3D5"/>
+      <stop offset="1" stop-color="#DCC3A8"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="600" y1="1080" x2="600" y2="1600" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A97A52"/>
+      <stop offset="1" stop-color="#744D33"/>
+    </linearGradient>
+    <linearGradient id="windowSky" x1="600" y1="198" x2="600" y2="708" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CDEAFF"/>
+      <stop offset="0.58" stop-color="#F8D7B1"/>
+      <stop offset="1" stop-color="#F3BC8E"/>
+    </linearGradient>
+    <linearGradient id="windowLedge" x1="600" y1="630" x2="600" y2="708" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFE5D9"/>
+      <stop offset="1" stop-color="#D9C4AF"/>
+    </linearGradient>
+  </defs>
+</svg>

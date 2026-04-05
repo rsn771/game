@@ -13,7 +13,12 @@ declare global {
         disableVerticalSwipes?: () => void
         requestFullscreen?: () => void
         initDataUnsafe?: {
-          user?: { id?: number }
+          user?: {
+            id?: number
+            username?: string
+            first_name?: string
+            last_name?: string
+          }
         }
       }
     }

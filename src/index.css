@@ -9,8 +9,11 @@
   --btn-bg-active: rgba(255, 255, 255, 0.14);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --topbar-base-height: 56px;
-  --tabbar-base-height: 68px;
+  --tg-chrome-offset: 22px;
+  --topbar-base-height: 60px;
+  --topbar-total-height: calc(var(--topbar-base-height) + var(--safe-top) + var(--tg-chrome-offset));
+  --tabbar-base-height: 76px;
+  --tabbar-total-height: calc(var(--tabbar-base-height) + var(--safe-bottom));
 
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -44,12 +47,12 @@ body {
 }
 
 .topbar {
-  min-height: calc(var(--topbar-base-height) + var(--safe-top));
+  min-height: var(--topbar-total-height);
   display: flex;
   align-items: center;
   justify-content: center;
   border-bottom: 1px solid var(--line);
-  padding: calc(var(--safe-top) + 10px) 16px 10px;
+  padding: calc(var(--safe-top) + var(--tg-chrome-offset) + 10px) 16px 12px;
   position: relative;
 }
 
@@ -98,7 +101,7 @@ body {
   align-items: stretch;
   justify-content: center;
   min-height: 0;
-  padding: 16px 16px calc(var(--tabbar-base-height) + var(--safe-bottom) + 16px);
+  padding: 18px 16px calc(var(--tabbar-total-height) + 16px);
 }
 
 .home {
@@ -106,6 +109,52 @@ body {
   max-width: 560px;
   display: grid;
   place-items: center;
+  position: relative;
+  min-height: min(72vh, 620px);
+}
+
+.homeStage {
+  position: relative;
+  width: 100%;
+  min-height: min(72vh, 620px);
+  display: grid;
+  place-items: center;
+}
+
+.homeStage.hasBackground {
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background: #050505;
+  box-shadow: 0 28px 56px rgba(0, 0, 0, 0.36);
+}
+
+.homeBackdrop {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  transform: scale(1.02);
+}
+
+.homeBackdropShade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.2) 52%, rgba(0, 0, 0, 0.42) 100%),
+    radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.16), transparent 38%);
+}
+
+.homeAvatarWrap {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: min(72vh, 620px);
+  padding: 36px 24px 64px;
+  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.34));
 }
 
 .stickman {
@@ -234,7 +283,7 @@ body {
 .panel {
   width: 100%;
   max-width: 560px;
-  max-height: min(520px, calc(100dvh - var(--topbar-base-height) - var(--tabbar-base-height) - var(--safe-top) - var(--safe-bottom) - 32px));
+  max-height: min(540px, calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 36px));
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--line);
@@ -561,12 +610,464 @@ body {
   color: var(--fg);
 }
 
+.friendsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.customizePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.customizePanelHeader h2 {
+  margin: 0;
+}
+
+.customizeHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.customizeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.backgroundCard {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.backgroundCard:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.backgroundCard.isActive {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.backgroundPreview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  overflow: hidden;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.backgroundPreviewShade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.28));
+}
+
+.backgroundPreviewFigure {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: 40px;
+  height: 106px;
+  transform: translateX(-50%);
+  border-radius: 999px 999px 14px 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 -40px 0 -10px rgba(255, 255, 255, 0.96),
+    -18px -4px 0 -10px rgba(255, 255, 255, 0.96),
+    18px -4px 0 -10px rgba(255, 255, 255, 0.96);
+  opacity: 0.96;
+}
+
+.backgroundMeta {
+  display: grid;
+  gap: 6px;
+}
+
+.backgroundNameRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.backgroundName {
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.backgroundBadge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.backgroundDescription {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.customizeReset {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--btn-bg);
+  color: var(--fg);
+  padding: 12px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.customizeReset:hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--line-strong);
+}
+
+.customizeReset:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.customizeLocked {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.friendsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.friendsHeader h2 {
+  margin: 0;
+}
+
+.friendsHeaderIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.friendsHeaderIcon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.friendsHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.friendsSearch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.friendsSearch:focus-within {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.friendsSearchIcon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.friendsSearchInput {
+  width: 100%;
+  appearance: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.friendsSearchInput::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.friendsNotice {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.friendsStack {
+  display: grid;
+  gap: 12px;
+}
+
+.friendsSection {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.friendsSectionTitle {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.24px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.friendList {
+  display: grid;
+  gap: 10px;
+}
+
+.friendRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+}
+
+.friendMeta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.friendPrimary {
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friendSecondary {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friendActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.friendActionButton {
+  width: 42px;
+  height: 42px;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--btn-bg);
+  color: rgba(255, 255, 255, 0.92);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease, opacity 140ms ease;
+}
+
+.friendActionButton svg {
+  width: 19px;
+  height: 19px;
+}
+
+.friendActionButton:hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--line-strong);
+}
+
+.friendActionButton:active {
+  transform: translateY(1px);
+}
+
+.friendActionButton.isDisabled,
+.friendActionButton:disabled {
+  opacity: 0.36;
+  cursor: not-allowed;
+}
+
+.friendsEmpty {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.friendTransferOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.74);
+  backdrop-filter: blur(12px);
+}
+
+.friendTransferModal {
+  width: min(92vw, 440px);
+  max-height: min(78vh, 680px);
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 22px;
+  background: rgba(0, 0, 0, 0.94);
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.friendTransferHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.friendTransferHeader h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.friendTransferClose {
+  width: 36px;
+  height: 36px;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.friendTransferClose:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.friendTransferTarget {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.friendTransferGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.friendTransferItem {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.friendTransferItem:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.friendTransferThumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.friendTransferImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.friendTransferName {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.friendTransferCount {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .tabbar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  min-height: calc(var(--tabbar-base-height) + var(--safe-bottom));
+  min-height: var(--tabbar-total-height);
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
@@ -582,9 +1083,16 @@ body {
   border-radius: 14px;
   background: var(--btn-bg);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
   letter-spacing: 0.2px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 4px;
+  text-align: center;
 }
 
 .tab:hover {
@@ -605,6 +1113,46 @@ body {
   color: var(--fg);
   background: var(--btn-bg-active);
   border-color: var(--line-strong);
+}
+
+.tabIcon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.edgeFriendsButton {
+  position: fixed;
+  right: 12px;
+  top: calc(50% - 160px);
+  transform: translateY(-50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.edgeFriendsButton:hover {
+  background: transparent;
+}
+
+.edgeFriendsButton:active {
+  transform: translateY(-50%) scale(0.97);
+}
+
+.edgeFriendsButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.edgeFriendsButton svg {
+  width: 46px;
+  height: 46px;
 }
 
 .edgeGardenButton {
@@ -919,6 +1467,11 @@ body.inventoryDragActive {
 }
 
 @media (max-width: 520px) {
+  :root {
+    --tg-chrome-offset: 38px;
+    --topbar-base-height: 56px;
+  }
+
   .topbarTitle {
     font-size: 15px;
   }
@@ -936,13 +1489,50 @@ body.inventoryDragActive {
   }
 
   .screen {
-    padding: 12px 12px calc(var(--tabbar-base-height) + var(--safe-bottom) + 12px);
+    padding: 12px 12px calc(var(--tabbar-total-height) + 12px);
   }
 
   .panel {
-    max-height: calc(100dvh - var(--topbar-base-height) - var(--tabbar-base-height) - var(--safe-top) - var(--safe-bottom) - 24px);
+    max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 24px);
     border-radius: 20px;
     padding: 14px;
+  }
+
+  .home,
+  .homeStage,
+  .homeAvatarWrap {
+    min-height: min(66vh, 560px);
+  }
+
+  .homeStage.hasBackground {
+    border-radius: 24px;
+  }
+
+  .homeAvatarWrap {
+    padding: 32px 18px 52px;
+  }
+
+  .customizeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .friendsHint {
+    font-size: 12px;
+  }
+
+  .friendRow {
+    padding: 11px;
+  }
+
+  .friendActionButton {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  .friendTransferModal {
+    width: min(94vw, 420px);
+    padding: 18px;
   }
 
   .inventoryGrid {
@@ -964,5 +1554,15 @@ body.inventoryDragActive {
 
   .inventoryDragGhost {
     width: min(46vw, 152px);
+  }
+
+  .tab {
+    font-size: 10px;
+    gap: 4px;
+    padding: 8px 2px;
+  }
+
+  .tab span {
+    line-height: 1.05;
   }
 }

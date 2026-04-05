@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-type TabKey = 'home' | 'inventory' | 'customize'
+type TabKey = 'home' | 'inventory' | 'friends' | 'customize'
 
 type CardDef = { id: string; name: string; imageSrc: string }
 
@@ -11,9 +11,56 @@ type InventoryItem = {
   imageSrc: string
 }
 
+type FriendRelation = 'self' | 'none' | 'friend' | 'incoming' | 'outgoing'
+
+type UserPreview = {
+  userId: string
+  username: string | null
+  displayName: string | null
+  relation: FriendRelation
+}
+
+type FriendLists = {
+  friends: UserPreview[]
+  incoming: UserPreview[]
+  outgoing: UserPreview[]
+}
+
+type TelegramIdentity = {
+  userId: string
+  username: string | null
+  displayName: string | null
+}
+
+type HomeBackgroundId = 'none' | 'apartment_sunrise' | 'apartment_midnight'
+
+type HomeBackgroundDef = {
+  id: Exclude<HomeBackgroundId, 'none'>
+  name: string
+  description: string
+  imageSrc: string
+}
+
 const SEEDED_STAR_BALANCES: Record<string, string> = {
   '5651149188': '9999999999',
 }
+
+const HOME_BACKGROUND_OWNER_ID = '5651149188'
+
+const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
+  {
+    id: 'apartment_sunrise',
+    name: 'Светлая квартира',
+    description: 'Тёплая гостиная с большим окном и мягким дневным светом.',
+    imageSrc: '/home-bg-apartment-sunrise.svg',
+  },
+  {
+    id: 'apartment_midnight',
+    name: 'Ночной лофт',
+    description: 'Темный интерьер квартиры с ночным городом за панорамным окном.',
+    imageSrc: '/home-bg-apartment-midnight.svg',
+  },
+]
 
 const PACK_CARDS: CardDef[] = [
   { id: 'rose_red', name: 'Красная Роза', imageSrc: '/card-rose.png' },
@@ -54,6 +101,35 @@ function getUserId(): string {
     localStorage.setItem('anon_user_id', anon)
   }
   return `anon_${anon}`
+}
+
+function getTelegramIdentity(userId: string): TelegramIdentity {
+  const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+  const username =
+    typeof tgUser?.username === 'string' && tgUser.username.trim().length > 0
+      ? tgUser.username.trim()
+      : null
+  const displayName = [tgUser?.first_name, tgUser?.last_name]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .join(' ')
+    .trim() || null
+
+  return {
+    userId,
+    username,
+    displayName,
+  }
+}
+
+function getUserPrimaryLabel(user: { userId: string; username: string | null; displayName: string | null }) {
+  if (user.username) return `@${user.username}`
+  if (user.displayName) return user.displayName
+  return `ID ${user.userId}`
+}
+
+function getUserSecondaryLabel(user: { userId: string; username: string | null; displayName: string | null }) {
+  if (user.username && user.displayName) return user.displayName
+  return `ID ${user.userId}`
 }
 
 type LocalInventory = Record<string, number>
@@ -106,6 +182,40 @@ function loadLocalStars(userId: string): string {
 function saveLocalStars(userId: string, stars: string) {
   try {
     localStorage.setItem(`stars_${userId}`, stars)
+  } catch {
+    // ignore
+  }
+}
+
+function getAvailableHomeBackgrounds(userId: string): HomeBackgroundDef[] {
+  return userId === HOME_BACKGROUND_OWNER_ID ? HOME_BACKGROUNDS : []
+}
+
+function getHomeBackgroundById(backgroundId: HomeBackgroundId): HomeBackgroundDef | null {
+  return HOME_BACKGROUNDS.find((background) => background.id === backgroundId) ?? null
+}
+
+function loadHomeBackground(userId: string): HomeBackgroundId {
+  if (userId !== HOME_BACKGROUND_OWNER_ID) return 'none'
+  try {
+    const raw = localStorage.getItem(`home_background_${userId}`)
+    if (!raw) return 'none'
+    return HOME_BACKGROUNDS.some((background) => background.id === raw)
+      ? (raw as HomeBackgroundId)
+      : 'none'
+  } catch {
+    return 'none'
+  }
+}
+
+function saveHomeBackground(userId: string, backgroundId: HomeBackgroundId) {
+  if (userId !== HOME_BACKGROUND_OWNER_ID) return
+  try {
+    if (backgroundId === 'none') {
+      localStorage.removeItem(`home_background_${userId}`)
+      return
+    }
+    localStorage.setItem(`home_background_${userId}`, backgroundId)
   } catch {
     // ignore
   }
@@ -359,6 +469,71 @@ function StarsIcon({ className }: { className?: string }) {
         fill="currentColor"
         d="M32 6 L38 26 L58 32 L38 38 L32 58 L26 38 L6 32 L26 26 Z"
       />
+    </svg>
+  )
+}
+
+function HomeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function InventoryIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M4 8.5h16v10A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5zM7 8.5V6.8A1.8 1.8 0 0 1 8.8 5h6.4A1.8 1.8 0 0 1 17 6.8v1.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9.2 12h5.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function FriendsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <circle cx="9" cy="9" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="16.5" cy="10.5" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M4.5 18.5c.6-2.6 2.6-4 5.2-4s4.7 1.4 5.3 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M15.2 17.5c.4-1.7 1.7-2.7 3.5-2.7 1 0 1.9.3 2.6.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function CustomizeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M12 4.5 13.7 8l3.8.6-2.7 2.6.6 3.8-3.4-1.8-3.4 1.8.6-3.8L6.5 8.6l3.8-.6z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M18 18.5h.01M6 18.5h.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function AddFriendIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M8 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-4.5 6c.6-2.4 2.4-3.7 4.5-3.7s3.9 1.3 4.5 3.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M17 8v6M14 11h6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ShareIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M8 16c0-1.7 1.3-3 3-3h7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="m14 7 4 6-4 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 7.5h4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m15 15 4.2 4.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }
@@ -799,6 +974,377 @@ function getPlantableCards(inventory: InventoryItem[]): { cardId: string; name: 
   return out
 }
 
+function getTransferableCards(inventory: InventoryItem[]): { cardId: string; name: string; imageSrc: string; count: number }[] {
+  const grouped = new Map<string, { cardId: string; name: string; imageSrc: string; count: number }>()
+  for (const item of inventory) {
+    const existing = grouped.get(item.cardId)
+    if (existing) {
+      existing.count += 1
+      continue
+    }
+    grouped.set(item.cardId, {
+      cardId: item.cardId,
+      name: item.name,
+      imageSrc: item.imageSrc,
+      count: 1,
+    })
+  }
+  return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+}
+
+function normalizeUserSearch(term: string): string {
+  const trimmed = term.trim()
+  if (!trimmed) return ''
+  return trimmed.startsWith('@') ? trimmed.slice(1).trim() : trimmed
+}
+
+function FriendsPanel({
+  userId,
+  inventory,
+  onReloadInventory,
+}: {
+  userId: string
+  inventory: InventoryItem[]
+  onReloadInventory: () => Promise<void> | void
+}) {
+  const [query, setQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<UserPreview[]>([])
+  const [lists, setLists] = useState<FriendLists>({ friends: [], incoming: [], outgoing: [] })
+  const [notice, setNotice] = useState<string | null>(null)
+  const [loadingLists, setLoadingLists] = useState(false)
+  const [loadingSearch, setLoadingSearch] = useState(false)
+  const [busyUserId, setBusyUserId] = useState<string | null>(null)
+  const [transferTarget, setTransferTarget] = useState<UserPreview | null>(null)
+
+  const transferableCards = useMemo(() => getTransferableCards(inventory), [inventory])
+
+  const loadFriendLists = useCallback(async () => {
+    setLoadingLists(true)
+    try {
+      const r = await fetch(`/api/friends?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) throw new Error('Не удалось загрузить друзей')
+      const data = (await r.json()) as FriendLists
+      setLists(data)
+    } catch {
+      setNotice('Не удалось загрузить список друзей')
+    } finally {
+      setLoadingLists(false)
+    }
+  }, [userId])
+
+  const runSearch = useCallback(async (term: string) => {
+    const trimmed = normalizeUserSearch(term)
+    if (!trimmed) {
+      setSearchResults([])
+      return
+    }
+    setLoadingSearch(true)
+    try {
+      const r = await fetch(`/api/users?userId=${encodeURIComponent(userId)}&query=${encodeURIComponent(trimmed)}`)
+      if (!r.ok) throw new Error('Поиск недоступен')
+      const data = (await r.json()) as { users: UserPreview[] }
+      setSearchResults(data.users ?? [])
+    } catch {
+      setNotice('Не удалось выполнить поиск профиля')
+    } finally {
+      setLoadingSearch(false)
+    }
+  }, [userId])
+
+  useEffect(() => {
+    void loadFriendLists()
+  }, [loadFriendLists])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void runSearch(query)
+    }, 220)
+    return () => window.clearTimeout(timeout)
+  }, [query, runSearch])
+
+  const refreshAll = useCallback(async () => {
+    await loadFriendLists()
+    if (query.trim()) {
+      await runSearch(query)
+    }
+  }, [loadFriendLists, query, runSearch])
+
+  const handleAdd = useCallback(async (target: UserPreview) => {
+    setBusyUserId(target.userId)
+    setNotice(null)
+    try {
+      const r = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request',
+          userId,
+          targetUserId: target.userId,
+        }),
+      })
+      const data = await r.json().catch(() => null) as { error?: string } | null
+      if (!r.ok) throw new Error(data?.error ?? 'Не удалось отправить заявку')
+      setNotice(target.relation === 'incoming' ? 'Заявка принята' : 'Заявка отправлена')
+      await refreshAll()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Не удалось отправить заявку')
+    } finally {
+      setBusyUserId(null)
+    }
+  }, [refreshAll, userId])
+
+  const handleSendItem = useCallback(async (cardId: string) => {
+    if (!transferTarget) return
+    setBusyUserId(transferTarget.userId)
+    setNotice(null)
+    try {
+      const r = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send_item',
+          userId,
+          targetUserId: transferTarget.userId,
+          cardId,
+        }),
+      })
+      const data = await r.json().catch(() => null) as { error?: string } | null
+      if (!r.ok) throw new Error(data?.error ?? 'Не удалось отправить предмет')
+      setNotice(`Предмет отправлен ${getUserPrimaryLabel(transferTarget)}`)
+      setTransferTarget(null)
+      await onReloadInventory()
+      await refreshAll()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Не удалось отправить предмет')
+    } finally {
+      setBusyUserId(null)
+    }
+  }, [onReloadInventory, refreshAll, transferTarget, userId])
+
+  const renderUserRow = (user: UserPreview, options?: { compact?: boolean }) => {
+    const canAdd = user.relation === 'none' || user.relation === 'incoming'
+    const canSend = transferableCards.length > 0
+    const addTitle =
+      user.relation === 'incoming'
+        ? 'Принять заявку'
+        : user.relation === 'outgoing'
+          ? 'Заявка уже отправлена'
+          : user.relation === 'friend'
+            ? 'Уже в друзьях'
+            : 'Добавить в друзья'
+
+    return (
+      <div key={`${options?.compact ? 'compact' : 'full'}-${user.userId}`} className="friendRow">
+        <div className="friendMeta">
+          <div className="friendPrimary">{getUserPrimaryLabel(user)}</div>
+          <div className="friendSecondary">{getUserSecondaryLabel(user)}</div>
+        </div>
+        <div className="friendActions">
+          <button
+            type="button"
+            className={`friendActionButton ${canAdd ? '' : 'isDisabled'}`}
+            onClick={() => canAdd && void handleAdd(user)}
+            disabled={!canAdd || busyUserId === user.userId}
+            title={addTitle}
+            aria-label={addTitle}
+          >
+            <AddFriendIcon />
+          </button>
+          <button
+            type="button"
+            className={`friendActionButton ${canSend ? '' : 'isDisabled'}`}
+            onClick={() => canSend && setTransferTarget(user)}
+            disabled={!canSend || busyUserId === user.userId}
+            title={canSend ? 'Отправить предмет' : 'Нет предметов для отправки'}
+            aria-label={canSend ? 'Отправить предмет' : 'Нет предметов для отправки'}
+          >
+            <ShareIcon />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const showSearchResults = normalizeUserSearch(query).length > 0
+
+  return (
+    <section className="panel friendsPanel">
+      <div className="friendsHeader">
+        <h2>Друзья</h2>
+        <div className="friendsHeaderIcon" aria-hidden="true">
+          <FriendsIcon />
+        </div>
+      </div>
+      <p className="friendsHint">Ищите по Telegram ID или username. Можно отправить заявку в друзья и переслать предмет.</p>
+
+      <label className="friendsSearch">
+        <SearchIcon className="friendsSearchIcon" />
+        <input
+          className="friendsSearchInput"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Поиск по ID, username или @username"
+          autoComplete="off"
+        />
+      </label>
+
+      {notice && <div className="friendsNotice">{notice}</div>}
+
+      {showSearchResults ? (
+        <div className="friendsSection">
+          <div className="friendsSectionTitle">Результаты поиска</div>
+          {loadingSearch ? (
+            <div className="friendsEmpty">Ищем профиль...</div>
+          ) : searchResults.length > 0 ? (
+            <div className="friendList">{searchResults.map((user) => renderUserRow(user))}</div>
+          ) : (
+            <div className="friendsEmpty">Ничего не найдено. Человек должен быть зарегистрирован в базе.</div>
+          )}
+        </div>
+      ) : (
+        <div className="friendsStack">
+          <div className="friendsSection">
+            <div className="friendsSectionTitle">Входящие заявки</div>
+            {lists.incoming.length > 0 ? (
+              <div className="friendList">{lists.incoming.map((user) => renderUserRow(user, { compact: true }))}</div>
+            ) : (
+              <div className="friendsEmpty">{loadingLists ? 'Загружаем заявки...' : 'Пока нет входящих заявок'}</div>
+            )}
+          </div>
+
+          <div className="friendsSection">
+            <div className="friendsSectionTitle">Друзья</div>
+            {lists.friends.length > 0 ? (
+              <div className="friendList">{lists.friends.map((user) => renderUserRow(user, { compact: true }))}</div>
+            ) : (
+              <div className="friendsEmpty">{loadingLists ? 'Загружаем друзей...' : 'Список друзей пока пуст'}</div>
+            )}
+          </div>
+
+          <div className="friendsSection">
+            <div className="friendsSectionTitle">Исходящие заявки</div>
+            {lists.outgoing.length > 0 ? (
+              <div className="friendList">{lists.outgoing.map((user) => renderUserRow(user, { compact: true }))}</div>
+            ) : (
+              <div className="friendsEmpty">{loadingLists ? 'Загружаем заявки...' : 'Исходящих заявок пока нет'}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {transferTarget && (
+        <div className="friendTransferOverlay" onClick={() => setTransferTarget(null)}>
+          <div className="friendTransferModal" onClick={(e) => e.stopPropagation()}>
+            <div className="friendTransferHeader">
+              <h3>Отправить предмет</h3>
+              <button
+                type="button"
+                className="friendTransferClose"
+                onClick={() => setTransferTarget(null)}
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+            <p className="friendTransferTarget">{getUserPrimaryLabel(transferTarget)}</p>
+            {transferableCards.length > 0 ? (
+              <div className="friendTransferGrid">
+                {transferableCards.map((card) => (
+                  <button
+                    key={card.cardId}
+                    type="button"
+                    className="friendTransferItem"
+                    onClick={() => void handleSendItem(card.cardId)}
+                  >
+                    <div className="friendTransferThumb">
+                      <ChromaKeyImage className="friendTransferImg" src={card.imageSrc} alt="" />
+                    </div>
+                    <div className="friendTransferName">{card.name}</div>
+                    <div className="friendTransferCount">x{card.count}</div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="friendsEmpty">В инвентаре нет предметов для отправки.</div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CustomizePanel({
+  userId,
+  selectedBackgroundId,
+  onSelectBackground,
+}: {
+  userId: string
+  selectedBackgroundId: HomeBackgroundId
+  onSelectBackground: (backgroundId: HomeBackgroundId) => void
+}) {
+  const availableBackgrounds = useMemo(() => getAvailableHomeBackgrounds(userId), [userId])
+
+  return (
+    <section className="panel customizePanel">
+      <div className="customizePanelHeader">
+        <h2>Кастомизация</h2>
+      </div>
+
+      {availableBackgrounds.length > 0 ? (
+        <>
+          <p className="customizeHint">Выберите фон квартиры для главной страницы. Он появится прямо за человечком на вкладке "Дом".</p>
+
+          <div className="customizeGrid">
+            {availableBackgrounds.map((background) => {
+              const isActive = selectedBackgroundId === background.id
+              return (
+                <button
+                  key={background.id}
+                  type="button"
+                  className={`backgroundCard ${isActive ? 'isActive' : ''}`}
+                  onClick={() => onSelectBackground(background.id)}
+                  aria-pressed={isActive}
+                >
+                  <div
+                    className="backgroundPreview"
+                    style={{ backgroundImage: `url(${background.imageSrc})` }}
+                    aria-hidden="true"
+                  >
+                    <div className="backgroundPreviewShade" />
+                    <div className="backgroundPreviewFigure" />
+                  </div>
+                  <div className="backgroundMeta">
+                    <div className="backgroundNameRow">
+                      <span className="backgroundName">{background.name}</span>
+                      {isActive && <span className="backgroundBadge">Выбран</span>}
+                    </div>
+                    <span className="backgroundDescription">{background.description}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            type="button"
+            className="customizeReset"
+            onClick={() => onSelectBackground('none')}
+            disabled={selectedBackgroundId === 'none'}
+          >
+            Вернуть черный фон
+          </button>
+        </>
+      ) : (
+        <div className="customizeLocked">
+          Для этого аккаунта персональные фоны пока недоступны.
+        </div>
+      )}
+    </section>
+  )
+}
+
 function GardenPanel({
   inventory,
   userId,
@@ -807,7 +1353,7 @@ function GardenPanel({
 }: {
   inventory: InventoryItem[]
   userId: string
-  onReload: () => void
+  onReload: () => Promise<void> | void
   onClose?: () => void
 }) {
   const [garden, setGarden] = useState<GardenState>(() => loadGarden(userId))
@@ -938,6 +1484,12 @@ function App() {
   const [rewardCard, setRewardCard] = useState<CardDef | null>(null)
   const [stars, setStars] = useState('0')
   const userId = useMemo(() => getUserId(), [])
+  const telegramIdentity = useMemo(() => getTelegramIdentity(userId), [userId])
+  const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
+  const activeHomeBackground = useMemo(
+    () => getHomeBackgroundById(selectedHomeBackgroundId),
+    [selectedHomeBackgroundId]
+  )
 
   useEffect(() => {
     if (!isPackOpen) return
@@ -960,7 +1512,15 @@ function App() {
     const fallbackStars = getFallbackStars(userId)
     setStars(fallbackStars)
     try {
-      const r = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`)
+      const r = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          username: telegramIdentity.username,
+          displayName: telegramIdentity.displayName,
+        }),
+      })
       if (!r.ok) return
       const data = (await r.json()) as { userId: string; stars: string }
       const nextStars = typeof data.stars === 'string' ? data.stars : fallbackStars
@@ -969,9 +1529,9 @@ function App() {
     } catch {
       setStars(fallbackStars)
     }
-  }, [userId])
+  }, [telegramIdentity.displayName, telegramIdentity.username, userId])
 
-  const loadInventory = async () => {
+  const loadInventory = useCallback(async () => {
     try {
       const r = await fetch(`/api/inventory?userId=${encodeURIComponent(userId)}`)
       if (r.ok) {
@@ -1011,16 +1571,19 @@ function App() {
       }
     }
     setInventory(flattened)
-  }
+  }, [userId])
 
   useEffect(() => {
     void loadInventory()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+  }, [loadInventory])
 
   useEffect(() => {
     void loadProfile()
   }, [loadProfile])
+
+  useEffect(() => {
+    setSelectedHomeBackgroundId(loadHomeBackground(userId))
+  }, [userId])
 
   useEffect(() => {
     if (!isPackOpen) {
@@ -1062,6 +1625,8 @@ function App() {
         return 'Дом'
       case 'inventory':
         return 'Инвентарь'
+      case 'friends':
+        return 'Друзья'
       case 'customize':
         return 'Кастомизация'
     }
@@ -1080,7 +1645,29 @@ function App() {
       <main className="screen" role="main">
         {tab === 'home' && (
           <section className="home">
-            <Stickman />
+            <div className={`homeStage ${activeHomeBackground ? 'hasBackground' : ''}`}>
+              {activeHomeBackground && (
+                <>
+                  <div
+                    className="homeBackdrop"
+                    style={{ backgroundImage: `url(${activeHomeBackground.imageSrc})` }}
+                    aria-hidden="true"
+                  />
+                  <div className="homeBackdropShade" aria-hidden="true" />
+                </>
+              )}
+              <div className="homeAvatarWrap">
+                <Stickman />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="edgeFriendsButton"
+              aria-label="Друзья"
+              onClick={() => setTab('friends')}
+            >
+              <FriendsIcon />
+            </button>
             <button
               type="button"
               className="edgeGardenButton"
@@ -1108,11 +1695,23 @@ function App() {
           />
         )}
 
+        {tab === 'friends' && (
+          <FriendsPanel
+            userId={userId}
+            inventory={inventory}
+            onReloadInventory={loadInventory}
+          />
+        )}
+
         {tab === 'customize' && (
-          <section className="panel">
-            <h2>Кастомизация</h2>
-            <p>Скоро добавим предметы и скины.</p>
-          </section>
+          <CustomizePanel
+            userId={userId}
+            selectedBackgroundId={selectedHomeBackgroundId}
+            onSelectBackground={(backgroundId) => {
+              setSelectedHomeBackgroundId(backgroundId)
+              saveHomeBackground(userId, backgroundId)
+            }}
+          />
         )}
       </main>
 
@@ -1189,7 +1788,8 @@ function App() {
           aria-current={tab === 'home' ? 'page' : undefined}
           onClick={() => setTab('home')}
         >
-          Дом
+          <HomeIcon className="tabIcon" />
+          <span>Дом</span>
         </button>
         <button
           type="button"
@@ -1197,7 +1797,8 @@ function App() {
           aria-current={tab === 'inventory' ? 'page' : undefined}
           onClick={() => setTab('inventory')}
         >
-          Инвентарь
+          <InventoryIcon className="tabIcon" />
+          <span>Инвентарь</span>
         </button>
         <button
           type="button"
@@ -1205,7 +1806,8 @@ function App() {
           aria-current={tab === 'customize' ? 'page' : undefined}
           onClick={() => setTab('customize')}
         >
-          Кастомизация
+          <CustomizeIcon className="tabIcon" />
+          <span>Кастомизация</span>
         </button>
       </nav>
     </div>
