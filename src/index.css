@@ -136,6 +136,7 @@ body {
   background-size: cover;
   background-repeat: no-repeat;
   transform: scale(1.02);
+  pointer-events: none;
 }
 
 .homeBackdropShade {
@@ -144,6 +145,7 @@ body {
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.2) 52%, rgba(0, 0, 0, 0.42) 100%),
     radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.16), transparent 38%);
+  pointer-events: none;
 }
 
 .homeAvatarWrap {
@@ -1075,6 +1077,7 @@ body {
   border-top: 1px solid var(--line);
   background: rgba(0, 0, 0, 0.9);
   backdrop-filter: blur(10px);
+  z-index: 40;
 }
 
 .tab {
@@ -1135,6 +1138,7 @@ body {
   display: grid;
   place-items: center;
   cursor: pointer;
+  z-index: 35;
 }
 
 .edgeFriendsButton:hover {
@@ -1169,6 +1173,7 @@ body {
   display: grid;
   place-items: center;
   cursor: pointer;
+  z-index: 35;
 }
 
 .edgeGardenButton:hover {
@@ -1203,6 +1208,7 @@ body {
   display: grid;
   place-items: center;
   cursor: pointer;
+  z-index: 35;
 }
 
 .edgePackButton:hover {
