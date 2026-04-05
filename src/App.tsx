@@ -419,6 +419,8 @@ function Stickman() {
 
 const LONG_PRESS_MS = 420
 const LONG_PRESS_MOVE_PX = 12
+const AUTO_SCROLL_EDGE_PX = 72
+const AUTO_SCROLL_MAX_STEP = 18
 
 function InventoryPanel({
   inventory,
@@ -438,14 +440,24 @@ function InventoryPanel({
   const pointerPosRef = useRef({ x: 0, y: 0 })
   const activeCardRef = useRef<HTMLDivElement | null>(null)
   const pendingItemRef = useRef<InventoryItem | null>(null)
+  const panelRef = useRef<HTMLElement | null>(null)
   const ghostRef = useRef<HTMLDivElement | null>(null)
-  const gridRef = useRef<HTMLDivElement | null>(null)
   const lastDropTargetRef = useRef<string | null>(null)
+  const autoScrollFrameRef = useRef<number | null>(null)
+  const autoScrollSpeedRef = useRef(0)
 
   const clearLongPress = useCallback(() => {
     if (!longPressRef.current) return
     clearTimeout(longPressRef.current)
     longPressRef.current = null
+  }, [])
+
+  const stopAutoScroll = useCallback(() => {
+    autoScrollSpeedRef.current = 0
+    if (autoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(autoScrollFrameRef.current)
+      autoScrollFrameRef.current = null
+    }
   }, [])
 
   const cleanupPointerSession = useCallback(() => {
@@ -462,8 +474,72 @@ function InventoryPanel({
     pendingItemRef.current = null
     activeCardRef.current = null
     lastDropTargetRef.current = null
+    stopAutoScroll()
     setActivePointerId(null)
+  }, [stopAutoScroll])
+
+  const updateDropTargetAtPoint = useCallback((clientX: number, clientY: number) => {
+    const el = document.elementFromPoint(clientX, clientY)
+    const card = el?.closest('[data-inventory-card-id]')
+    const next = card?.getAttribute('data-inventory-card-id') ?? null
+    if (next !== lastDropTargetRef.current) {
+      lastDropTargetRef.current = next
+      setDropTargetId(next)
+    }
   }, [])
+
+  const updateAutoScrollSpeed = useCallback((clientX: number, clientY: number) => {
+    const panel = panelRef.current
+    if (!panel || !draggingItem) {
+      stopAutoScroll()
+      return
+    }
+
+    const rect = panel.getBoundingClientRect()
+    const insideX = clientX >= rect.left && clientX <= rect.right
+    if (!insideX) {
+      stopAutoScroll()
+      return
+    }
+
+    let nextSpeed = 0
+    const topDistance = clientY - rect.top
+    const bottomDistance = rect.bottom - clientY
+    const canScrollUp = panel.scrollTop > 0
+    const canScrollDown = panel.scrollTop + panel.clientHeight < panel.scrollHeight - 1
+
+    if (topDistance >= 0 && topDistance < AUTO_SCROLL_EDGE_PX && canScrollUp) {
+      const intensity = 1 - topDistance / AUTO_SCROLL_EDGE_PX
+      nextSpeed = -Math.max(4, Math.round(intensity * AUTO_SCROLL_MAX_STEP))
+    } else if (bottomDistance >= 0 && bottomDistance < AUTO_SCROLL_EDGE_PX && canScrollDown) {
+      const intensity = 1 - bottomDistance / AUTO_SCROLL_EDGE_PX
+      nextSpeed = Math.max(4, Math.round(intensity * AUTO_SCROLL_MAX_STEP))
+    }
+
+    autoScrollSpeedRef.current = nextSpeed
+    if (nextSpeed === 0 || autoScrollFrameRef.current !== null) return
+
+    const tick = () => {
+      const currentPanel = panelRef.current
+      if (!currentPanel || !draggingItem || autoScrollSpeedRef.current === 0) {
+        stopAutoScroll()
+        return
+      }
+
+      const prevScrollTop = currentPanel.scrollTop
+      currentPanel.scrollTop += autoScrollSpeedRef.current
+      updateDropTargetAtPoint(pointerPosRef.current.x, pointerPosRef.current.y)
+
+      if (currentPanel.scrollTop === prevScrollTop) {
+        stopAutoScroll()
+        return
+      }
+
+      autoScrollFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    autoScrollFrameRef.current = requestAnimationFrame(tick)
+  }, [draggingItem, stopAutoScroll, updateDropTargetAtPoint])
 
   const applyMerge = useCallback(
     (cardA: string, cardB: string, resultId: string) => {
@@ -537,15 +613,10 @@ function InventoryPanel({
         g.style.left = `${e.clientX}px`
         g.style.top = `${e.clientY}px`
       }
-      const el = document.elementFromPoint(e.clientX, e.clientY)
-      const card = el?.closest('[data-inventory-card-id]')
-      const next = card?.getAttribute('data-inventory-card-id') ?? null
-      if (next !== lastDropTargetRef.current) {
-        lastDropTargetRef.current = next
-        setDropTargetId(next)
-      }
+      updateDropTargetAtPoint(e.clientX, e.clientY)
+      updateAutoScrollSpeed(e.clientX, e.clientY)
     },
-    [clearLongPress, draggingItem]
+    [clearLongPress, draggingItem, updateAutoScrollSpeed, updateDropTargetAtPoint]
   )
 
   const handleDocumentPointerUp = useCallback(
@@ -593,6 +664,17 @@ function InventoryPanel({
   }, [activePointerId, cleanupPointerSession, clearLongPress, handleDocumentPointerMove, handleDocumentPointerUp])
 
   useEffect(() => {
+    if (!draggingItem) return
+    const preventTouchScroll = (e: TouchEvent) => {
+      e.preventDefault()
+    }
+    document.addEventListener('touchmove', preventTouchScroll, { passive: false })
+    return () => {
+      document.removeEventListener('touchmove', preventTouchScroll)
+    }
+  }, [draggingItem])
+
+  useEffect(() => {
     return () => {
       clearLongPress()
       cleanupPointerSession()
@@ -609,10 +691,10 @@ function InventoryPanel({
   }
 
   return (
-    <section className="panel">
+    <section ref={panelRef} className="panel">
       <h2>Инвентарь</h2>
       <p className="inventoryHint">Зажмите и перетащите на другой предмет для слияния</p>
-      <div ref={gridRef} className="inventoryGrid" role="list">
+      <div className="inventoryGrid" role="list">
         {inventory.map((item) => (
           <div
             key={item.id}
