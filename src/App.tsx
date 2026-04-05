@@ -11,9 +11,17 @@ type InventoryItem = {
   imageSrc: string
 }
 
+const SEEDED_STAR_BALANCES: Record<string, string> = {
+  '5651149188': '9999999999',
+}
+
 const PACK_CARDS: CardDef[] = [
   { id: 'rose_red', name: 'Красная Роза', imageSrc: '/card-rose.png' },
   { id: 'rose_white', name: 'Белая Роза', imageSrc: '/card-rose-white.png' },
+  { id: 'knife_kitchen', name: 'Кухонный нож', imageSrc: '/card-knife-kitchen.png' },
+  { id: 'log', name: 'Бревно', imageSrc: '/card-log.png' },
+  { id: 'axe_noir', name: 'Топор нуар', imageSrc: '/card-axe-noir.png' },
+  { id: 'axe', name: 'Топор', imageSrc: '/card-axe.png' },
 ]
 
 const ALL_CARDS: CardDef[] = [
@@ -29,7 +37,7 @@ const MERGE_RESULTS: Record<string, string> = {
 }
 
 function pickRandomReward(): CardDef {
-  return PACK_CARDS[Math.random() < 0.5 ? 0 : 1]
+  return PACK_CARDS[Math.floor(Math.random() * PACK_CARDS.length)]
 }
 
 function findMergeResult(a: string, b: string): string | null {
@@ -82,6 +90,38 @@ function removeLocalCard(userId: string, cardId: string, count: number) {
   inv[cardId] = Math.max(0, cur - count)
   if (inv[cardId] === 0) delete inv[cardId]
   saveLocalInventory(userId, inv)
+}
+
+function loadLocalStars(userId: string): string {
+  try {
+    const raw = localStorage.getItem(`stars_${userId}`)
+    if (!raw) return '0'
+    const normalized = raw.trim()
+    return /^\d+$/.test(normalized) ? normalized : '0'
+  } catch {
+    return '0'
+  }
+}
+
+function saveLocalStars(userId: string, stars: string) {
+  try {
+    localStorage.setItem(`stars_${userId}`, stars)
+  } catch {
+    // ignore
+  }
+}
+
+function getFallbackStars(userId: string): string {
+  const local = loadLocalStars(userId)
+  const seeded = SEEDED_STAR_BALANCES[userId]
+  if (!seeded) return local
+  return Number(local) > Number(seeded) ? local : seeded
+}
+
+function formatStars(stars: string): string {
+  const numeric = Number(stars)
+  if (!Number.isFinite(numeric)) return stars
+  return new Intl.NumberFormat('ru-RU').format(numeric)
 }
 
 type GardenState = (string | null)[]
@@ -308,6 +348,17 @@ function PotIcon({ className }: { className?: string }) {
         <path d="M14 24 L18 56 M34 24 L30 56" opacity="0.4" />
         <path d="M8 24 Q24 16 40 24" />
       </g>
+    </svg>
+  )
+}
+
+function StarsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M32 6 L38 26 L58 32 L38 38 L32 58 L26 38 L6 32 L26 26 Z"
+      />
     </svg>
   )
 }
@@ -885,6 +936,7 @@ function App() {
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [didRewardThisOpen, setDidRewardThisOpen] = useState(false)
   const [rewardCard, setRewardCard] = useState<CardDef | null>(null)
+  const [stars, setStars] = useState('0')
   const userId = useMemo(() => getUserId(), [])
 
   useEffect(() => {
@@ -903,6 +955,21 @@ function App() {
     // ensure DB schema + seed exists (safe to call multiple times)
     fetch('/api/setup', { method: 'POST' }).catch(() => {})
   }, [])
+
+  const loadProfile = useCallback(async () => {
+    const fallbackStars = getFallbackStars(userId)
+    setStars(fallbackStars)
+    try {
+      const r = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) return
+      const data = (await r.json()) as { userId: string; stars: string }
+      const nextStars = typeof data.stars === 'string' ? data.stars : fallbackStars
+      setStars(nextStars)
+      saveLocalStars(userId, nextStars)
+    } catch {
+      setStars(fallbackStars)
+    }
+  }, [userId])
 
   const loadInventory = async () => {
     try {
@@ -950,6 +1017,10 @@ function App() {
     void loadInventory()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
+
+  useEffect(() => {
+    void loadProfile()
+  }, [loadProfile])
 
   useEffect(() => {
     if (!isPackOpen) {
@@ -1000,6 +1071,10 @@ function App() {
     <div className="app">
       <header className="topbar">
         <div className="topbarTitle">{title}</div>
+        <div className="starsBadge" aria-label={`Баланс звёзд: ${formatStars(stars)}`}>
+          <StarsIcon className="starsBadgeIcon" />
+          <span className="starsBadgeValue">{formatStars(stars)}</span>
+        </div>
       </header>
 
       <main className="screen" role="main">

@@ -1,4 +1,5 @@
 import { sql } from '@vercel/postgres'
+import { ensureUser } from './_lib/db'
 
 export const config = {
   runtime: 'nodejs',
@@ -16,6 +17,7 @@ export default async function handler(req: Request): Promise<Response> {
     const url = new URL(req.url)
     const userId = url.searchParams.get('userId')
     if (!userId) return json({ error: 'userId is required' }, 400)
+    await ensureUser(userId)
 
     const { rows } = await sql<{ card_id: string; name: string; image_src: string; qty: number }>`
       select i.card_id, c.name, c.image_src, i.qty
@@ -34,6 +36,7 @@ export default async function handler(req: Request): Promise<Response> {
       | null
     const userId = body?.userId
     if (!userId) return json({ error: 'userId is required' }, 400)
+    await ensureUser(userId)
 
     if (body?.merge) {
       const { from, to } = body.merge
@@ -80,6 +83,7 @@ export default async function handler(req: Request): Promise<Response> {
     const cardId = body?.cardId
     const qty = Math.max(0, Math.floor(body?.qty ?? 0))
     if (!userId || !cardId) return json({ error: 'userId and cardId are required' }, 400)
+    await ensureUser(userId)
 
     await sql`
       insert into inventory (user_id, card_id, qty)

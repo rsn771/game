@@ -1,4 +1,5 @@
 import { sql } from '@vercel/postgres'
+import { ensureSchema } from './_lib/db'
 
 export const config = {
   runtime: 'nodejs',
@@ -6,6 +7,8 @@ export const config = {
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'GET') return new Response('Method Not Allowed', { status: 405 })
+
+  await ensureSchema()
 
   const { rows } = await sql<{ id: string; name: string; image_src: string }>`
     select id, name, image_src from cards order by id asc;
@@ -15,4 +18,3 @@ export default async function handler(req: Request): Promise<Response> {
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })
 }
-
