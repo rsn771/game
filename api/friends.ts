@@ -7,6 +7,10 @@ export const config = {
 
 type Relation = 'friend' | 'incoming' | 'outgoing'
 
+function isTelegramNumericId(value: string): boolean {
+  return /^\d{5,20}$/.test(value)
+}
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -100,6 +104,9 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   await ensureUser(userId)
+  if (isTelegramNumericId(targetUserId)) {
+    await ensureUser(targetUserId)
+  }
   const targetUser = await getUserById(targetUserId)
   if (!targetUser) {
     return json({ error: 'Target user is not registered' }, 404)

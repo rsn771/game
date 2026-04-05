@@ -18,6 +18,35 @@ function normalizeSearchQuery(raw: string): string {
   return trimmed.startsWith('@') ? trimmed.slice(1).trim() : trimmed
 }
 
+function isTelegramNumericId(value: string): boolean {
+  return /^\d{5,20}$/.test(value)
+}
+
+async function loadRelation(userId: string, targetUserId: string) {
+  const { rows } = await sql<{
+    from_user_id: string
+    to_user_id: string
+    status: 'pending' | 'accepted'
+  }>`
+    select from_user_id, to_user_id, status
+    from friend_requests
+    where (
+      (from_user_id = ${userId} and to_user_id = ${targetUserId})
+      or
+      (from_user_id = ${targetUserId} and to_user_id = ${userId})
+    )
+    limit 2;
+  `
+
+  const direct = rows.find((row) => row.from_user_id === userId && row.to_user_id === targetUserId)
+  const reverse = rows.find((row) => row.from_user_id === targetUserId && row.to_user_id === userId)
+
+  if (direct?.status === 'accepted' || reverse?.status === 'accepted') return 'friend'
+  if (direct?.status === 'pending') return 'outgoing'
+  if (reverse?.status === 'pending') return 'incoming'
+  return 'none'
+}
+
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'GET') return new Response('Method Not Allowed', { status: 405 })
 
@@ -91,12 +120,23 @@ export default async function handler(req: Request): Promise<Response> {
     limit 20;
   `
 
+  const users = rows.map((row) => ({
+    userId: row.tg_user_id,
+    username: row.username,
+    displayName: row.display_name,
+    relation: row.relation,
+  }))
+
+  if (users.length === 0 && query !== userId && isTelegramNumericId(query)) {
+    users.push({
+      userId: query,
+      username: null,
+      displayName: null,
+      relation: await loadRelation(userId, query),
+    })
+  }
+
   return json({
-    users: rows.map((row) => ({
-      userId: row.tg_user_id,
-      username: row.username,
-      displayName: row.display_name,
-      relation: row.relation,
-    })),
+    users,
   })
 }

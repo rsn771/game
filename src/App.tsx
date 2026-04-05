@@ -41,6 +41,15 @@ type HomeBackgroundDef = {
   imageSrc: string
 }
 
+type NightStarDef = {
+  left: string
+  top: string
+  size: number
+  delay: string
+  duration: string
+  opacity: number
+}
+
 const SEEDED_STAR_BALANCES: Record<string, string> = {
   '5651149188': '9999999999',
 }
@@ -60,6 +69,21 @@ const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
     description: 'Темный интерьер квартиры с ночным городом за панорамным окном.',
     imageSrc: '/home-bg-apartment-midnight.svg',
   },
+]
+
+const NIGHT_LOFT_STARS: NightStarDef[] = [
+  { left: '22%', top: '18%', size: 3, delay: '0s', duration: '2.1s', opacity: 0.78 },
+  { left: '28%', top: '28%', size: 2, delay: '0.4s', duration: '1.8s', opacity: 0.62 },
+  { left: '36%', top: '22%', size: 2, delay: '0.8s', duration: '2.4s', opacity: 0.86 },
+  { left: '44%', top: '16%', size: 3, delay: '1.2s', duration: '2s', opacity: 0.74 },
+  { left: '53%', top: '26%', size: 2, delay: '0.25s', duration: '2.3s', opacity: 0.66 },
+  { left: '61%', top: '19%', size: 2, delay: '1.6s', duration: '1.9s', opacity: 0.72 },
+  { left: '69%', top: '27%', size: 3, delay: '0.65s', duration: '2.2s', opacity: 0.8 },
+  { left: '76%', top: '18%', size: 2, delay: '1.1s', duration: '1.7s', opacity: 0.7 },
+  { left: '82%', top: '24%', size: 2, delay: '0.95s', duration: '2.5s', opacity: 0.64 },
+  { left: '72%', top: '33%', size: 3, delay: '1.35s', duration: '2.1s', opacity: 0.82 },
+  { left: '58%', top: '34%', size: 2, delay: '0.55s', duration: '1.85s', opacity: 0.68 },
+  { left: '33%', top: '35%', size: 2, delay: '1.8s', duration: '2.35s', opacity: 0.76 },
 ]
 
 const PACK_CARDS: CardDef[] = [
@@ -1635,10 +1659,13 @@ function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="topbarTitle">{title}</div>
-        <div className="starsBadge" aria-label={`Баланс звёзд: ${formatStars(stars)}`}>
-          <StarsIcon className="starsBadgeIcon" />
-          <span className="starsBadgeValue">{formatStars(stars)}</span>
+        <div className="topbarContent">
+          <div className="topbarSide" aria-hidden="true" />
+          <div className="topbarTitle">{title}</div>
+          <div className="starsBadge" aria-label={`Баланс звёзд: ${formatStars(stars)}`}>
+            <StarsIcon className="starsBadgeIcon" />
+            <span className="starsBadgeValue">{formatStars(stars)}</span>
+          </div>
         </div>
       </header>
 
@@ -1653,6 +1680,25 @@ function App() {
                     style={{ backgroundImage: `url(${activeHomeBackground.imageSrc})` }}
                     aria-hidden="true"
                   />
+                  {activeHomeBackground.id === 'apartment_midnight' && (
+                    <div className="homeNightStars" aria-hidden="true">
+                      {NIGHT_LOFT_STARS.map((star, index) => (
+                        <span
+                          key={`${star.left}-${star.top}-${index}`}
+                          className="homeNightStar"
+                          style={{
+                            left: star.left,
+                            top: star.top,
+                            width: `${star.size}px`,
+                            height: `${star.size}px`,
+                            animationDelay: star.delay,
+                            animationDuration: star.duration,
+                            opacity: star.opacity,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <div className="homeBackdropShade" aria-hidden="true" />
                 </>
               )}

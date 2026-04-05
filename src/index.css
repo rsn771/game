@@ -48,25 +48,30 @@ body {
 
 .topbar {
   min-height: var(--topbar-total-height);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-bottom: 1px solid var(--line);
   padding: calc(var(--safe-top) + var(--tg-chrome-offset) + 10px) 16px 12px;
-  position: relative;
+}
+
+.topbarContent {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.topbarSide {
+  min-width: 0;
 }
 
 .topbarTitle {
   font-size: 16px;
   letter-spacing: 0.2px;
   font-weight: 600;
+  text-align: center;
 }
 
 .starsBadge {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -81,6 +86,7 @@ body {
   line-height: 1;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  justify-self: end;
 }
 
 .starsBadgeIcon {
@@ -137,6 +143,40 @@ body {
   background-repeat: no-repeat;
   transform: scale(1.02);
   pointer-events: none;
+  z-index: 0;
+}
+
+.homeNightStars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.homeNightStar {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 8px rgba(255, 255, 255, 0.8),
+    0 0 18px rgba(185, 208, 255, 0.56);
+  animation: home-night-twinkle 2.2s ease-in-out infinite;
+}
+
+@keyframes home-night-twinkle {
+  0%,
+  100% {
+    transform: scale(0.72);
+    opacity: 0.18;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  72% {
+    transform: scale(0.92);
+    opacity: 0.34;
+  }
 }
 
 .homeBackdropShade {
@@ -146,11 +186,12 @@ body {
     linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.2) 52%, rgba(0, 0, 0, 0.42) 100%),
     radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.16), transparent 38%);
   pointer-events: none;
+  z-index: 2;
 }
 
 .homeAvatarWrap {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   display: grid;
   place-items: center;
   width: 100%;
@@ -1483,7 +1524,6 @@ body.inventoryDragActive {
   }
 
   .starsBadge {
-    right: 12px;
     max-width: min(48vw, 156px);
     padding: 5px 8px;
     font-size: 11px;
