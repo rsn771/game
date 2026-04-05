@@ -3,6 +3,7 @@ import { sql } from '@vercel/postgres'
 const BONUS_USER_ID = '5651149188'
 const BONUS_STARS = 9_999_999_999
 const BONUS_SEED_VERSION = 1
+const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
 
 export type UserProfileInput = {
   userId: string
@@ -96,6 +97,16 @@ async function seedBonusUser() {
   `
 }
 
+async function seedSearchableUsers() {
+  for (const userId of SEARCHABLE_USER_IDS) {
+    await sql`
+      insert into users (tg_user_id)
+      values (${userId})
+      on conflict (tg_user_id) do nothing;
+    `
+  }
+}
+
 export async function ensureSchema() {
   await sql`
     create table if not exists users (
@@ -164,6 +175,7 @@ export async function ensureSchema() {
 
   await seedCards()
   await seedBonusUser()
+  await seedSearchableUsers()
 }
 
 export async function ensureUser(userId: string) {
