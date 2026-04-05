@@ -431,12 +431,39 @@ function InventoryPanel({
 }) {
   const [draggingItem, setDraggingItem] = useState<InventoryItem | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [activePointerId, setActivePointerId] = useState<number | null>(null)
   const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pointerIdRef = useRef<number | null>(null)
   const downPosRef = useRef({ x: 0, y: 0 })
   const pointerPosRef = useRef({ x: 0, y: 0 })
+  const activeCardRef = useRef<HTMLDivElement | null>(null)
+  const pendingItemRef = useRef<InventoryItem | null>(null)
   const ghostRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
+  const lastDropTargetRef = useRef<string | null>(null)
+
+  const clearLongPress = useCallback(() => {
+    if (!longPressRef.current) return
+    clearTimeout(longPressRef.current)
+    longPressRef.current = null
+  }, [])
+
+  const cleanupPointerSession = useCallback(() => {
+    const pointerId = pointerIdRef.current
+    if (pointerId !== null && activeCardRef.current?.hasPointerCapture?.(pointerId)) {
+      try {
+        activeCardRef.current.releasePointerCapture(pointerId)
+      } catch {
+        // ignore
+      }
+    }
+    document.body.classList.remove('inventoryDragActive')
+    pointerIdRef.current = null
+    pendingItemRef.current = null
+    activeCardRef.current = null
+    lastDropTargetRef.current = null
+    setActivePointerId(null)
+  }, [])
 
   const applyMerge = useCallback(
     (cardA: string, cardB: string, resultId: string) => {
@@ -459,40 +486,52 @@ function InventoryPanel({
   )
 
   const handlePointerDown = useCallback(
-    (e: React.PointerEvent, item: InventoryItem) => {
-      if (draggingItem) return
-      e.preventDefault()
+    (e: React.PointerEvent<HTMLDivElement>, item: InventoryItem) => {
+      if (draggingItem || pointerIdRef.current !== null) return
       downPosRef.current = { x: e.clientX, y: e.clientY }
       pointerPosRef.current = { x: e.clientX, y: e.clientY }
       pointerIdRef.current = e.pointerId
-      e.currentTarget.setPointerCapture(e.pointerId)
+      pendingItemRef.current = item
+      activeCardRef.current = e.currentTarget
+      setActivePointerId(e.pointerId)
       longPressRef.current = window.setTimeout(() => {
         longPressRef.current = null
         lastDropTargetRef.current = null
         setDropTargetId(null)
         pointerPosRef.current = { x: downPosRef.current.x, y: downPosRef.current.y }
-        setDraggingItem(item)
+        const pointerId = pointerIdRef.current
+        const nextItem = pendingItemRef.current
+        if (pointerId === null || !nextItem) return
+        if (activeCardRef.current) {
+          try {
+            activeCardRef.current.setPointerCapture(pointerId)
+          } catch {
+            // ignore
+          }
+        }
+        document.body.classList.add('inventoryDragActive')
+        setDraggingItem(nextItem)
       }, LONG_PRESS_MS)
     },
     [draggingItem]
   )
 
-  const handlePointerMoveBeforeDrag = useCallback((e: React.PointerEvent) => {
-    pointerPosRef.current = { x: e.clientX, y: e.clientY }
-    if (!longPressRef.current) return
-    const dx = e.clientX - downPosRef.current.x
-    const dy = e.clientY - downPosRef.current.y
-    if (dx * dx + dy * dy > LONG_PRESS_MOVE_PX * LONG_PRESS_MOVE_PX) {
-      clearTimeout(longPressRef.current)
-      longPressRef.current = null
-    }
-  }, [])
-
-  const lastDropTargetRef = useRef<string | null>(null)
-
-  const handleGlobalPointerMove = useCallback(
+  const handleDocumentPointerMove = useCallback(
     (e: PointerEvent) => {
-      if (!draggingItem || e.pointerId !== pointerIdRef.current) return
+      if (e.pointerId !== pointerIdRef.current) return
+      pointerPosRef.current = { x: e.clientX, y: e.clientY }
+      if (!draggingItem) {
+        if (!longPressRef.current) return
+        const dx = e.clientX - downPosRef.current.x
+        const dy = e.clientY - downPosRef.current.y
+        if (dx * dx + dy * dy > LONG_PRESS_MOVE_PX * LONG_PRESS_MOVE_PX) {
+          clearLongPress()
+          pendingItemRef.current = null
+        }
+        return
+      }
+
+      e.preventDefault()
       const g = ghostRef.current
       if (g) {
         g.style.left = `${e.clientX}px`
@@ -506,34 +545,22 @@ function InventoryPanel({
         setDropTargetId(next)
       }
     },
-    [draggingItem]
+    [clearLongPress, draggingItem]
   )
 
-  const handlePointerUpOrCancel = useCallback((e: React.PointerEvent) => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current)
-      longPressRef.current = null
-    }
-    if (e.pointerId === pointerIdRef.current) {
-      e.currentTarget.releasePointerCapture?.(e.pointerId)
-      pointerIdRef.current = null
-    }
-  }, [])
-
-  const handleGlobalPointerUp = useCallback(
+  const handleDocumentPointerUp = useCallback(
     (e: PointerEvent) => {
       if (e.pointerId !== pointerIdRef.current) return
-      if (longPressRef.current) {
-        clearTimeout(longPressRef.current)
-        longPressRef.current = null
+      clearLongPress()
+      if (!draggingItem) {
+        cleanupPointerSession()
+        return
       }
-      pointerIdRef.current = null
-      lastDropTargetRef.current = null
-      if (!draggingItem) return
       const targetId = dropTargetId
       const src = draggingItem
       setDraggingItem(null)
       setDropTargetId(null)
+      cleanupPointerSession()
       if (!targetId || targetId === src.id) return
       const targetItem = inventory.find((i) => i.id === targetId)
       if (!targetItem) return
@@ -541,35 +568,36 @@ function InventoryPanel({
       if (!result) return
       applyMerge(src.cardId, targetItem.cardId, result)
     },
-    [draggingItem, dropTargetId, inventory, applyMerge]
+    [applyMerge, cleanupPointerSession, clearLongPress, draggingItem, dropTargetId, inventory]
   )
 
   useEffect(() => {
-    if (!draggingItem) return
-    document.addEventListener('pointermove', handleGlobalPointerMove)
-    document.addEventListener('pointerup', handleGlobalPointerUp)
-    document.addEventListener('pointercancel', handleGlobalPointerUp)
-    return () => {
-      document.removeEventListener('pointermove', handleGlobalPointerMove)
-      document.removeEventListener('pointerup', handleGlobalPointerUp)
-      document.removeEventListener('pointercancel', handleGlobalPointerUp)
+    if (activePointerId === null) return
+    const handleDocumentPointerCancel = (e: PointerEvent) => {
+      if (e.pointerId !== pointerIdRef.current) return
+      clearLongPress()
+      setDraggingItem(null)
+      setDropTargetId(null)
+      cleanupPointerSession()
     }
-  }, [draggingItem, handleGlobalPointerMove, handleGlobalPointerUp])
 
-  const handlePointerCancel = useCallback(() => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current)
-      longPressRef.current = null
+    document.addEventListener('pointermove', handleDocumentPointerMove, { passive: false })
+    document.addEventListener('pointerup', handleDocumentPointerUp)
+    document.addEventListener('pointercancel', handleDocumentPointerCancel)
+
+    return () => {
+      document.removeEventListener('pointermove', handleDocumentPointerMove)
+      document.removeEventListener('pointerup', handleDocumentPointerUp)
+      document.removeEventListener('pointercancel', handleDocumentPointerCancel)
     }
-    setDraggingItem(null)
-    setDropTargetId(null)
-  }, [])
+  }, [activePointerId, cleanupPointerSession, clearLongPress, handleDocumentPointerMove, handleDocumentPointerUp])
 
   useEffect(() => {
     return () => {
-      if (longPressRef.current) clearTimeout(longPressRef.current)
+      clearLongPress()
+      cleanupPointerSession()
     }
-  }, [])
+  }, [cleanupPointerSession, clearLongPress])
 
   if (inventory.length === 0) {
     return (
@@ -592,10 +620,6 @@ function InventoryPanel({
             role="listitem"
             data-inventory-card-id={item.id}
             onPointerDown={(e) => handlePointerDown(e, item)}
-            onPointerMove={handlePointerMoveBeforeDrag}
-            onPointerUp={handlePointerUpOrCancel}
-            onPointerLeave={handlePointerCancel}
-            onPointerCancel={handlePointerCancel}
           >
             <div className="inventoryThumb" aria-hidden="true">
               <ChromaKeyImage
