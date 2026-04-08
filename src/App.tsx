@@ -128,6 +128,10 @@ const SEEDED_STAR_BALANCES: Record<string, string> = {
 const APARTMENT_CARD_ID = 'asset_apartment'
 const BUSINESS_OPEN_COST = 100_000
 const BUSINESS_START_CAPITAL = 80_000
+const BUSINESS_CLICK_DOUBLE_THRESHOLD = 150_000
+const BUSINESS_EMPLOYEE_CLICK_STARS = 5
+const BUSINESS_OWNER_CLICK_STARS = 3
+const BUSINESS_CAPITAL_CLICK_STARS = 1
 const SLOT_SPIN_COST = 100
 const SLOT_JACKPOT_STARS = 10_000
 const BUSINESS_SLOT_COUNT = 6
@@ -609,6 +613,18 @@ function formatStars(stars: string): string {
   const numeric = Number(stars)
   if (!Number.isFinite(numeric)) return stars
   return new Intl.NumberFormat('ru-RU').format(numeric)
+}
+
+function getEmployeeBusinessClickReward(currentCapital: string | number) {
+  const numericCapital = Number(currentCapital)
+  const capital = Number.isFinite(numericCapital) && numericCapital >= 0 ? numericCapital : 0
+  const multiplier = capital >= BUSINESS_CLICK_DOUBLE_THRESHOLD ? 2 : 1
+
+  return {
+    workerStars: BUSINESS_EMPLOYEE_CLICK_STARS * multiplier,
+    ownerStars: BUSINESS_OWNER_CLICK_STARS * multiplier,
+    businessCapital: BUSINESS_CAPITAL_CLICK_STARS * multiplier,
+  }
 }
 
 const chromaKeyCache = new Map<string, string>()
@@ -2173,18 +2189,25 @@ function SlotsModal({
 function ClickerModal({
   userId,
   stars,
+  businessMode,
+  businessProfile,
   onClose,
   onStarsChange,
+  onBusinessChange,
 }: {
   userId: string
   stars: string
+  businessMode: BusinessMode
+  businessProfile: BusinessProfile | null
   onClose: () => void
   onStarsChange: (nextStars: string) => void
+  onBusinessChange?: (nextBusiness: BusinessProfile | null) => void
 }) {
   const [status, setStatus] = useState<string | null>(null)
   const [tapBurst, setTapBurst] = useState(0)
-  const [tapFloats, setTapFloats] = useState<{ id: number; drift: number }[]>([])
+  const [tapFloats, setTapFloats] = useState<{ id: number; drift: number; value: number }[]>([])
   const latestStarsRef = useRef(stars)
+  const latestBusinessRef = useRef<BusinessProfile | null>(businessProfile)
   const queuedDeltaRef = useRef(0)
   const syncingRef = useRef(false)
   const resetBurstTimerRef = useRef<number | null>(null)
@@ -2192,6 +2215,9 @@ function ClickerModal({
   const floatIdRef = useRef(0)
   const emitStarsChange = useEffectEvent((nextStars: string) => {
     onStarsChange(nextStars)
+  })
+  const emitBusinessChange = useEffectEvent((nextBusiness: BusinessProfile | null) => {
+    onBusinessChange?.(nextBusiness)
   })
   const flushQueuedStars = useEffectEvent(async () => {
     if (syncingRef.current || queuedDeltaRef.current === 0) return
@@ -2206,11 +2232,19 @@ function ClickerModal({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ userId, delta }),
       })
-      const data = (await r.json().catch(() => null)) as { error?: string; stars?: string } | null
+      const data = (await r.json().catch(() => null)) as { error?: string; stars?: string; businessCapital?: string } | null
       if (r.ok && typeof data?.stars === 'string') {
         latestStarsRef.current = data.stars
         saveLocalStars(userId, data.stars)
         emitStarsChange(data.stars)
+        if (typeof data.businessCapital === 'string' && latestBusinessRef.current) {
+          const nextBusiness = {
+            ...latestBusinessRef.current,
+            capital: data.businessCapital,
+          }
+          latestBusinessRef.current = nextBusiness
+          emitBusinessChange(nextBusiness)
+        }
         setStatus(null)
       } else if (data?.error) {
         setStatus(data.error)
@@ -2230,6 +2264,10 @@ function ClickerModal({
   }, [stars])
 
   useEffect(() => {
+    latestBusinessRef.current = businessProfile
+  }, [businessProfile])
+
+  useEffect(() => {
     return () => {
       if (resetBurstTimerRef.current !== null) {
         window.clearTimeout(resetBurstTimerRef.current)
@@ -2241,16 +2279,39 @@ function ClickerModal({
     }
   }, [])
 
+  const activeEmployeeReward = businessMode === 'employee' && businessProfile
+    ? getEmployeeBusinessClickReward(businessProfile.capital)
+    : null
+
   const handleTap = useCallback(() => {
-    const nextStars = String(Math.max(0, Number(latestStarsRef.current) + 1))
+    const activeBusiness = businessMode === 'employee' ? latestBusinessRef.current : null
+    const reward = activeBusiness ? getEmployeeBusinessClickReward(activeBusiness.capital) : null
+    const workerReward = reward?.workerStars ?? 1
+    const capitalReward = reward?.businessCapital ?? 0
+    const nextStars = String(Math.max(0, Number(latestStarsRef.current) + workerReward))
     latestStarsRef.current = nextStars
     saveLocalStars(userId, nextStars)
     emitStarsChange(nextStars)
+    if (activeBusiness && capitalReward > 0) {
+      const nextBusiness = {
+        ...activeBusiness,
+        capital: String(Math.max(0, Number(activeBusiness.capital) + capitalReward)),
+      }
+      latestBusinessRef.current = nextBusiness
+      emitBusinessChange(nextBusiness)
+    }
     queuedDeltaRef.current += 1
     setTapBurst((value) => value + 1)
     const nextFloatId = floatIdRef.current + 1
     floatIdRef.current = nextFloatId
-    setTapFloats((current) => [...current, { id: nextFloatId, drift: Math.round((Math.random() - 0.5) * 28) }])
+    setTapFloats((current) => [
+      ...current,
+      {
+        id: nextFloatId,
+        drift: Math.round((Math.random() - 0.5) * 28),
+        value: workerReward,
+      },
+    ])
     const floatTimerId = window.setTimeout(() => {
       setTapFloats((current) => current.filter((entry) => entry.id !== nextFloatId))
       floatTimersRef.current = floatTimersRef.current.filter((timerId) => timerId !== floatTimerId)
@@ -2265,7 +2326,7 @@ function ClickerModal({
     }, 180)
 
     void flushQueuedStars()
-  }, [emitStarsChange, flushQueuedStars, userId])
+  }, [businessMode, emitBusinessChange, emitStarsChange, flushQueuedStars, userId])
 
   return (
     <div className="clickerOverlay" role="presentation" onClick={onClose}>
@@ -2279,7 +2340,11 @@ function ClickerModal({
         <div className="clickerHeader">
           <div>
             <h3>Звёздный кликер</h3>
-            <p className="clickerSubtext">Каждое нажатие даёт +1 звезду на баланс.</p>
+            <p className="clickerSubtext">
+              {activeEmployeeReward
+                ? `Каждый клик: вам +${activeEmployeeReward.workerStars}, бизнесу +${activeEmployeeReward.businessCapital}, владельцу +${activeEmployeeReward.ownerStars}.`
+                : 'Каждое нажатие даёт +1 звезду на баланс.'}
+            </p>
           </div>
           <button type="button" className="slotsClose" onClick={onClose} aria-label="Закрыть">
             ×
@@ -2298,7 +2363,7 @@ function ClickerModal({
               className="clickerTapFloat"
               style={{ ['--clicker-float-drift' as any]: `${float.drift}px` }}
             >
-              +1
+              +{float.value}
             </span>
           ))}
           <button
@@ -3418,10 +3483,15 @@ function App() {
         <ClickerModal
           userId={userId}
           stars={stars}
+          businessMode={businessMode}
+          businessProfile={businessProfile}
           onClose={() => setIsClickerOpen(false)}
           onStarsChange={(nextStars) => {
             setStars(nextStars)
             saveLocalStars(userId, nextStars)
+          }}
+          onBusinessChange={(nextBusiness) => {
+            setBusinessProfile(nextBusiness)
           }}
         />
       )}
