@@ -1,22 +1,26 @@
 import { sql } from '@vercel/postgres'
-import { ensureUser } from './_lib/db'
+import { ensureUser } from './_lib/db.js'
+import {
+  getQueryParam,
+  readJsonBody,
+  sendJson,
+  sendText,
+  type NodeApiRequest,
+  type NodeApiResponse,
+} from './_lib/http.js'
 
 export const config = {
   runtime: 'nodejs',
 }
 
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-  })
-}
-
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
   if (req.method === 'GET') {
-    const url = new URL(req.url)
-    const userId = url.searchParams.get('userId')
-    if (!userId) return json({ error: 'userId is required' }, 400)
+    const userId = getQueryParam(req, 'userId')
+    if (!userId) {
+      sendJson(res, { error: 'userId is required' }, 400)
+      return
+    }
+
     await ensureUser(userId)
 
     const { rows } = await sql<{ card_id: string; name: string; image_src: string; qty: number }>`
@@ -27,22 +31,30 @@ export default async function handler(req: Request): Promise<Response> {
       order by i.card_id asc;
     `
 
-    return json({ items: rows })
+    sendJson(res, { items: rows })
+    return
   }
 
   if (req.method === 'POST') {
-    const body = await req.json().catch(() => null) as
+    const body = await readJsonBody<
       | { userId?: string; cardId?: string; qty?: number; merge?: { from: string[]; to: string } }
       | null
+    >(req)
     const userId = body?.userId
-    if (!userId) return json({ error: 'userId is required' }, 400)
+    if (!userId) {
+      sendJson(res, { error: 'userId is required' }, 400)
+      return
+    }
+
     await ensureUser(userId)
 
     if (body?.merge) {
       const { from, to } = body.merge
       if (!Array.isArray(from) || from.length !== 2 || !to) {
-        return json({ error: 'merge.from (2 card ids) and merge.to are required' }, 400)
+        sendJson(res, { error: 'merge.from (2 card ids) and merge.to are required' }, 400)
+        return
       }
+
       const [a, b] = from
       await sql`
         update inventory set qty = greatest(0, qty - 1)
@@ -58,12 +70,17 @@ export default async function handler(req: Request): Promise<Response> {
         on conflict (user_id, card_id)
         do update set qty = inventory.qty + 1
       `
-      return json({ ok: true })
+
+      sendJson(res, { ok: true })
+      return
     }
 
     const cardId = body?.cardId
     const qty = Math.max(1, Math.floor(body?.qty ?? 1))
-    if (!cardId) return json({ error: 'cardId is required' }, 400)
+    if (!cardId) {
+      sendJson(res, { error: 'cardId is required' }, 400)
+      return
+    }
 
     await sql`
       insert into inventory (user_id, card_id, qty)
@@ -72,17 +89,23 @@ export default async function handler(req: Request): Promise<Response> {
       do update set qty = inventory.qty + excluded.qty;
     `
 
-    return json({ ok: true })
+    sendJson(res, { ok: true })
+    return
   }
 
   if (req.method === 'PATCH') {
-    const body = await req.json().catch(() => null) as
+    const body = await readJsonBody<
       | { userId?: string; cardId?: string; qty?: number }
       | null
+    >(req)
     const userId = body?.userId
     const cardId = body?.cardId
     const qty = Math.max(0, Math.floor(body?.qty ?? 0))
-    if (!userId || !cardId) return json({ error: 'userId and cardId are required' }, 400)
+    if (!userId || !cardId) {
+      sendJson(res, { error: 'userId and cardId are required' }, 400)
+      return
+    }
+
     await ensureUser(userId)
 
     await sql`
@@ -91,9 +114,10 @@ export default async function handler(req: Request): Promise<Response> {
       on conflict (user_id, card_id)
       do update set qty = excluded.qty;
     `
-    return json({ ok: true })
+
+    sendJson(res, { ok: true })
+    return
   }
 
-  return new Response('Method Not Allowed', { status: 405 })
+  sendText(res, 'Method Not Allowed', 405)
 }
-

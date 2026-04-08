@@ -1,17 +1,16 @@
-import { ensureSchema } from './_lib/db'
+import { ensureSchema } from './_lib/db.js'
+import { sendJson, sendText, type NodeApiRequest, type NodeApiResponse } from './_lib/http.js'
 
 export const config = {
   runtime: 'nodejs',
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
   if (req.method !== 'POST' && req.method !== 'GET') {
-    return new Response('Method Not Allowed', { status: 405 })
+    sendText(res, 'Method Not Allowed', 405)
+    return
   }
 
   await ensureSchema()
-
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-  })
+  sendJson(res, { ok: true })
 }

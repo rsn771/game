@@ -6,6 +6,9 @@ const BONUS_SEED_VERSION = 1
 const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
 const STARTER_INVENTORY_CARD_ID = 'asset_apartment'
 const INVENTORY_RESET_VERSION = 1
+const SCHEMA_LOCK_KEY = 41_523_301
+
+type SqlRunner = typeof sql
 
 export type UserProfileInput = {
   userId: string
@@ -19,8 +22,8 @@ function normalizeOptionalText(value?: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-async function seedCards() {
-  await sql`
+async function seedCards(query: SqlRunner) {
+  await query`
     insert into cards (id, name, image_src)
     values ('asset_apartment', 'Квартира', '/home-bg-apartment-sunrise.svg')
     on conflict (id) do update
@@ -28,7 +31,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('rose_red', 'Красная Роза', '/card-rose.png')
     on conflict (id) do update
@@ -36,7 +39,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('rose_white', 'Белая Роза', '/card-rose-white.png')
     on conflict (id) do update
@@ -44,7 +47,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('knife_kitchen', 'Кухонный нож', '/card-knife-kitchen.png')
     on conflict (id) do update
@@ -52,7 +55,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('log', 'Бревно', '/card-log.png')
     on conflict (id) do update
@@ -60,7 +63,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('axe_noir', 'Топор нуар', '/card-axe-noir.png')
     on conflict (id) do update
@@ -68,7 +71,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('axe', 'Топор', '/card-axe.png')
     on conflict (id) do update
@@ -76,7 +79,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('rose_2red', '2 красные розы', '/card-rose-2red.png')
     on conflict (id) do update
@@ -84,7 +87,7 @@ async function seedCards() {
         image_src = excluded.image_src;
   `
 
-  await sql`
+  await query`
     insert into cards (id, name, image_src)
     values ('rose_bouquet', 'Букет красных роз', '/card-rose-bouquet.png')
     on conflict (id) do update
@@ -93,8 +96,8 @@ async function seedCards() {
   `
 }
 
-async function seedBonusUser() {
-  await sql`
+async function seedBonusUser(query: SqlRunner) {
+  await query`
     insert into users (tg_user_id, stars, seed_version)
     values (${BONUS_USER_ID}, ${BONUS_STARS}, ${BONUS_SEED_VERSION})
     on conflict (tg_user_id) do update
@@ -107,9 +110,9 @@ async function seedBonusUser() {
   `
 }
 
-async function seedSearchableUsers() {
+async function seedSearchableUsers(query: SqlRunner) {
   for (const userId of SEARCHABLE_USER_IDS) {
-    await sql`
+    await query`
       insert into users (tg_user_id)
       values (${userId})
       on conflict (tg_user_id) do nothing;
@@ -126,8 +129,8 @@ async function seedStarterInventoryForUser(userId: string) {
   `
 }
 
-async function resetInventoryIfNeeded() {
-  const { rows } = await sql<{ value: string }>`
+async function resetInventoryIfNeeded(query: SqlRunner) {
+  const { rows } = await query<{ value: string }>`
     select value
     from app_meta
     where key = 'inventory_reset_version'
@@ -137,9 +140,9 @@ async function resetInventoryIfNeeded() {
   const currentVersion = Number(rows[0]?.value ?? '0')
   if (currentVersion >= INVENTORY_RESET_VERSION) return
 
-  await sql`delete from inventory;`
+  await query`delete from inventory;`
 
-  await sql`
+  await query`
     insert into inventory (user_id, card_id, qty)
     select tg_user_id, ${STARTER_INVENTORY_CARD_ID}, 1
     from users
@@ -147,7 +150,7 @@ async function resetInventoryIfNeeded() {
     do update set qty = excluded.qty;
   `
 
-  await sql`
+  await query`
     insert into app_meta (key, value)
     values ('inventory_reset_version', ${String(INVENTORY_RESET_VERSION)})
     on conflict (key)
@@ -156,93 +159,106 @@ async function resetInventoryIfNeeded() {
 }
 
 export async function ensureSchema() {
-  await sql`
-    create table if not exists users (
-      tg_user_id text primary key,
-      username text,
-      display_name text,
-      stars bigint not null default 0,
-      seed_version integer not null default 0,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
-    );
-  `
+  const client = await sql.connect()
+  const query = client.sql.bind(client) as SqlRunner
 
-  await sql`alter table users add column if not exists username text;`
-  await sql`alter table users add column if not exists display_name text;`
+  try {
+    await query`select pg_advisory_lock(${SCHEMA_LOCK_KEY});`
 
-  await sql`
-    create table if not exists cards (
-      id text primary key,
-      name text not null,
-      image_src text not null
-    );
-  `
+    await query`
+      create table if not exists users (
+        tg_user_id text primary key,
+        username text,
+        display_name text,
+        stars bigint not null default 0,
+        seed_version integer not null default 0,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    `
 
-  await sql`
-    create table if not exists inventory (
-      user_id text not null,
-      card_id text not null references cards(id),
-      qty integer not null default 1,
-      primary key (user_id, card_id)
-    );
-  `
+    await query`alter table users add column if not exists username text;`
+    await query`alter table users add column if not exists display_name text;`
 
-  await sql`
-    create table if not exists friend_requests (
-      from_user_id text not null references users(tg_user_id) on delete cascade,
-      to_user_id text not null references users(tg_user_id) on delete cascade,
-      status text not null default 'pending',
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now(),
-      primary key (from_user_id, to_user_id),
-      check (from_user_id <> to_user_id),
-      check (status in ('pending', 'accepted'))
-    );
-  `
+    await query`
+      create table if not exists cards (
+        id text primary key,
+        name text not null,
+        image_src text not null
+      );
+    `
 
-  await sql`
-    create table if not exists businesses (
-      owner_user_id text primary key references users(tg_user_id) on delete cascade,
-      name text not null,
-      description text not null default '',
-      capital bigint not null default 80000,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
-    );
-  `
+    await query`
+      create table if not exists inventory (
+        user_id text not null,
+        card_id text not null references cards(id),
+        qty integer not null default 1,
+        primary key (user_id, card_id)
+      );
+    `
 
-  await sql`
-    create table if not exists app_meta (
-      key text primary key,
-      value text not null
-    );
-  `
+    await query`
+      create table if not exists friend_requests (
+        from_user_id text not null references users(tg_user_id) on delete cascade,
+        to_user_id text not null references users(tg_user_id) on delete cascade,
+        status text not null default 'pending',
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (from_user_id, to_user_id),
+        check (from_user_id <> to_user_id),
+        check (status in ('pending', 'accepted'))
+      );
+    `
 
-  await sql`
-    create index if not exists users_username_lower_idx
-    on users (lower(username));
-  `
+    await query`
+      create table if not exists businesses (
+        owner_user_id text primary key references users(tg_user_id) on delete cascade,
+        name text not null,
+        description text not null default '',
+        capital bigint not null default 80000,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    `
 
-  await sql`
-    create index if not exists users_display_name_lower_idx
-    on users (lower(display_name));
-  `
+    await query`
+      create table if not exists app_meta (
+        key text primary key,
+        value text not null
+      );
+    `
 
-  await sql`
-    create index if not exists friend_requests_to_status_idx
-    on friend_requests (to_user_id, status, updated_at desc);
-  `
+    await query`
+      create index if not exists users_username_lower_idx
+      on users (lower(username));
+    `
 
-  await sql`
-    create index if not exists friend_requests_from_status_idx
-    on friend_requests (from_user_id, status, updated_at desc);
-  `
+    await query`
+      create index if not exists users_display_name_lower_idx
+      on users (lower(display_name));
+    `
 
-  await seedCards()
-  await seedBonusUser()
-  await seedSearchableUsers()
-  await resetInventoryIfNeeded()
+    await query`
+      create index if not exists friend_requests_to_status_idx
+      on friend_requests (to_user_id, status, updated_at desc);
+    `
+
+    await query`
+      create index if not exists friend_requests_from_status_idx
+      on friend_requests (from_user_id, status, updated_at desc);
+    `
+
+    await seedCards(query)
+    await seedBonusUser(query)
+    await seedSearchableUsers(query)
+    await resetInventoryIfNeeded(query)
+  } finally {
+    try {
+      await query`select pg_advisory_unlock(${SCHEMA_LOCK_KEY});`
+    } finally {
+      client.release()
+    }
+  }
 }
 
 export async function ensureUser(userId: string) {

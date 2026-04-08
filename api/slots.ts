@@ -1,5 +1,12 @@
 import { sql } from '@vercel/postgres'
-import { ensureUser } from './_lib/db'
+import { ensureUser } from './_lib/db.js'
+import {
+  readJsonBody,
+  sendJson,
+  sendText,
+  type NodeApiRequest,
+  type NodeApiResponse,
+} from './_lib/http.js'
 
 export const config = {
   runtime: 'nodejs',
@@ -48,23 +55,22 @@ const SLOT_REWARDS: SlotRewardDef[] = [
   },
 ]
 
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-  })
-}
-
 function pickRandomSlotReward(): SlotRewardDef {
   return SLOT_REWARDS[Math.floor(Math.random() * SLOT_REWARDS.length)]
 }
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
+export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
+  if (req.method !== 'POST') {
+    sendText(res, 'Method Not Allowed', 405)
+    return
+  }
 
-  const body = await req.json().catch(() => null) as { userId?: string } | null
+  const body = await readJsonBody<{ userId?: string } | null>(req)
   const userId = body?.userId
-  if (!userId) return json({ error: 'userId is required' }, 400)
+  if (!userId) {
+    sendJson(res, { error: 'userId is required' }, 400)
+    return
+  }
 
   await ensureUser(userId)
 
@@ -79,7 +85,8 @@ export default async function handler(req: Request): Promise<Response> {
 
   const nextStars = starRows[0]?.stars
   if (!nextStars) {
-    return json({ error: 'Недостаточно звёзд для прокрута' }, 400)
+    sendJson(res, { error: 'Недостаточно звёзд для прокрута' }, 400)
+    return
   }
 
   const rewards = [pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()]
@@ -98,7 +105,7 @@ export default async function handler(req: Request): Promise<Response> {
     finalStars = jackpotRows[0]?.stars ?? nextStars
   }
 
-  return json({
+  sendJson(res, {
     ok: true,
     stars: finalStars,
     rewards,

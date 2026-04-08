@@ -1,15 +1,15 @@
 import { sql } from '@vercel/postgres'
-import { ensureUser } from './_lib/db'
+import { ensureUser } from './_lib/db.js'
+import {
+  getQueryParam,
+  sendJson,
+  sendText,
+  type NodeApiRequest,
+  type NodeApiResponse,
+} from './_lib/http.js'
 
 export const config = {
   runtime: 'nodejs',
-}
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-  })
 }
 
 function normalizeSearchQuery(raw: string): string {
@@ -47,18 +47,24 @@ async function loadRelation(userId: string, targetUserId: string) {
   return 'none'
 }
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== 'GET') return new Response('Method Not Allowed', { status: 405 })
+export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
+  if (req.method !== 'GET') {
+    sendText(res, 'Method Not Allowed', 405)
+    return
+  }
 
-  const url = new URL(req.url)
-  const userId = url.searchParams.get('userId')
-  const query = normalizeSearchQuery(url.searchParams.get('query') ?? '')
-  if (!userId) return json({ error: 'userId is required' }, 400)
+  const userId = getQueryParam(req, 'userId')
+  const query = normalizeSearchQuery(getQueryParam(req, 'query') ?? '')
+  if (!userId) {
+    sendJson(res, { error: 'userId is required' }, 400)
+    return
+  }
 
   await ensureUser(userId)
 
   if (!query) {
-    return json({ users: [] })
+    sendJson(res, { users: [] })
+    return
   }
 
   const queryLower = query.toLowerCase()
@@ -136,7 +142,7 @@ export default async function handler(req: Request): Promise<Response> {
     })
   }
 
-  return json({
+  sendJson(res, {
     users,
   })
 }

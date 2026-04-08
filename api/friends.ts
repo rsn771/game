@@ -1,5 +1,13 @@
 import { sql } from '@vercel/postgres'
-import { ensureUser, getUserById } from './_lib/db'
+import { ensureUser, getUserById } from './_lib/db.js'
+import {
+  getQueryParam,
+  readJsonBody,
+  sendJson,
+  sendText,
+  type NodeApiRequest,
+  type NodeApiResponse,
+} from './_lib/http.js'
 
 export const config = {
   runtime: 'nodejs',
@@ -9,13 +17,6 @@ type Relation = 'friend' | 'incoming' | 'outgoing'
 
 function isTelegramNumericId(value: string): boolean {
   return /^\d{5,20}$/.test(value)
-}
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-  })
 }
 
 async function loadFriends(userId: string) {
@@ -78,38 +79,49 @@ async function loadFriends(userId: string) {
   }
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
   if (req.method === 'GET') {
-    const url = new URL(req.url)
-    const userId = url.searchParams.get('userId')
-    if (!userId) return json({ error: 'userId is required' }, 400)
+    const userId = getQueryParam(req, 'userId')
+    if (!userId) {
+      sendJson(res, { error: 'userId is required' }, 400)
+      return
+    }
 
     await ensureUser(userId)
-    return json(await loadFriends(userId))
+    sendJson(res, await loadFriends(userId))
+    return
   }
 
-  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
+  if (req.method !== 'POST') {
+    sendText(res, 'Method Not Allowed', 405)
+    return
+  }
 
-  const body = await req.json().catch(() => null) as
+  const body = await readJsonBody<
     | { action?: 'request' | 'send_item'; userId?: string; targetUserId?: string; cardId?: string }
     | null
+  >(req)
 
   const userId = body?.userId
   const targetUserId = body?.targetUserId
   if (!userId || !targetUserId) {
-    return json({ error: 'userId and targetUserId are required' }, 400)
+    sendJson(res, { error: 'userId and targetUserId are required' }, 400)
+    return
   }
   if (userId === targetUserId) {
-    return json({ error: 'Cannot perform this action on yourself' }, 400)
+    sendJson(res, { error: 'Cannot perform this action on yourself' }, 400)
+    return
   }
 
   await ensureUser(userId)
   if (isTelegramNumericId(targetUserId)) {
     await ensureUser(targetUserId)
   }
+
   const targetUser = await getUserById(targetUserId)
   if (!targetUser) {
-    return json({ error: 'Target user is not registered' }, 404)
+    sendJson(res, { error: 'Target user is not registered' }, 404)
+    return
   }
 
   if (body?.action === 'request') {
@@ -131,7 +143,8 @@ export default async function handler(req: Request): Promise<Response> {
     const reverse = rows.find((row) => row.from_user_id === targetUserId && row.to_user_id === userId)
 
     if (direct?.status === 'accepted' || reverse?.status === 'accepted') {
-      return json({ ok: true, relation: 'friend', lists: await loadFriends(userId) })
+      sendJson(res, { ok: true, relation: 'friend', lists: await loadFriends(userId) })
+      return
     }
 
     if (reverse?.status === 'pending') {
@@ -141,11 +154,14 @@ export default async function handler(req: Request): Promise<Response> {
         where from_user_id = ${targetUserId}
           and to_user_id = ${userId};
       `
-      return json({ ok: true, relation: 'friend', lists: await loadFriends(userId) })
+
+      sendJson(res, { ok: true, relation: 'friend', lists: await loadFriends(userId) })
+      return
     }
 
     if (direct?.status === 'pending') {
-      return json({ ok: true, relation: 'outgoing', lists: await loadFriends(userId) })
+      sendJson(res, { ok: true, relation: 'outgoing', lists: await loadFriends(userId) })
+      return
     }
 
     await sql`
@@ -155,12 +171,16 @@ export default async function handler(req: Request): Promise<Response> {
       do update set status = 'pending', updated_at = now();
     `
 
-    return json({ ok: true, relation: 'outgoing', lists: await loadFriends(userId) })
+    sendJson(res, { ok: true, relation: 'outgoing', lists: await loadFriends(userId) })
+    return
   }
 
   if (body?.action === 'send_item') {
     const cardId = body.cardId
-    if (!cardId) return json({ error: 'cardId is required' }, 400)
+    if (!cardId) {
+      sendJson(res, { error: 'cardId is required' }, 400)
+      return
+    }
 
     const { rows: senderRows } = await sql<{ qty: number }>`
       select qty
@@ -172,7 +192,8 @@ export default async function handler(req: Request): Promise<Response> {
 
     const senderCard = senderRows[0]
     if (!senderCard || senderCard.qty < 1) {
-      return json({ error: 'Item is not available in inventory' }, 400)
+      sendJson(res, { error: 'Item is not available in inventory' }, 400)
+      return
     }
 
     await sql`
@@ -197,8 +218,9 @@ export default async function handler(req: Request): Promise<Response> {
       do update set qty = inventory.qty + 1;
     `
 
-    return json({ ok: true })
+    sendJson(res, { ok: true })
+    return
   }
 
-  return json({ error: 'Unsupported action' }, 400)
+  sendJson(res, { error: 'Unsupported action' }, 400)
 }

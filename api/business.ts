@@ -1,5 +1,13 @@
 import { sql } from '@vercel/postgres'
-import { ensureSchema, ensureUser } from './_lib/db'
+import { ensureSchema, ensureUser } from './_lib/db.js'
+import {
+  getQueryParam,
+  readJsonBody,
+  sendJson,
+  sendText,
+  type NodeApiRequest,
+  type NodeApiResponse,
+} from './_lib/http.js'
 
 export const config = {
   runtime: 'nodejs',
@@ -7,13 +15,6 @@ export const config = {
 
 const BUSINESS_OPEN_COST = 100_000
 const BUSINESS_START_CAPITAL = 80_000
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-  })
-}
 
 function normalizeRequiredText(value: unknown, fallback: string): string {
   if (typeof value !== 'string') return fallback
@@ -41,35 +42,43 @@ async function loadStars(userId: string) {
   return rows[0]?.stars ?? '0'
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
   await ensureSchema()
 
   if (req.method === 'GET') {
-    const url = new URL(req.url)
-    const userId = url.searchParams.get('userId')
-    if (!userId) return json({ error: 'userId is required' }, 400)
+    const userId = getQueryParam(req, 'userId')
+    if (!userId) {
+      sendJson(res, { error: 'userId is required' }, 400)
+      return
+    }
 
     await ensureUser(userId)
     const business = await loadBusiness(userId)
 
-    return json({
+    sendJson(res, {
       business,
       stars: await loadStars(userId),
     })
+    return
   }
 
   if (req.method === 'POST') {
-    const body = await req.json().catch(() => null) as
+    const body = await readJsonBody<
       | { userId?: string; name?: string; description?: string }
       | null
+    >(req)
     const userId = body?.userId
-    if (!userId) return json({ error: 'userId is required' }, 400)
+    if (!userId) {
+      sendJson(res, { error: 'userId is required' }, 400)
+      return
+    }
 
     await ensureUser(userId)
 
     const existing = await loadBusiness(userId)
     if (existing) {
-      return json({ error: 'Бизнес уже открыт' }, 409)
+      sendJson(res, { error: 'Бизнес уже открыт' }, 409)
+      return
     }
 
     const name = normalizeRequiredText(body?.name, 'Мой бизнес')
@@ -86,7 +95,8 @@ export default async function handler(req: Request): Promise<Response> {
 
     const nextStars = starRows[0]?.stars
     if (!nextStars) {
-      return json({ error: 'Недостаточно звёзд для открытия бизнеса' }, 400)
+      sendJson(res, { error: 'Недостаточно звёзд для открытия бизнеса' }, 400)
+      return
     }
 
     await sql`
@@ -94,7 +104,7 @@ export default async function handler(req: Request): Promise<Response> {
       values (${userId}, ${name}, ${description}, ${BUSINESS_START_CAPITAL});
     `
 
-    return json({
+    sendJson(res, {
       ok: true,
       stars: nextStars,
       business: {
@@ -103,20 +113,26 @@ export default async function handler(req: Request): Promise<Response> {
         capital: String(BUSINESS_START_CAPITAL),
       },
     })
+    return
   }
 
   if (req.method === 'PATCH') {
-    const body = await req.json().catch(() => null) as
+    const body = await readJsonBody<
       | { userId?: string; name?: string; description?: string }
       | null
+    >(req)
     const userId = body?.userId
-    if (!userId) return json({ error: 'userId is required' }, 400)
+    if (!userId) {
+      sendJson(res, { error: 'userId is required' }, 400)
+      return
+    }
 
     await ensureUser(userId)
 
     const existing = await loadBusiness(userId)
     if (!existing) {
-      return json({ error: 'Бизнес ещё не открыт' }, 404)
+      sendJson(res, { error: 'Бизнес ещё не открыт' }, 404)
+      return
     }
 
     const name = normalizeRequiredText(body?.name, existing.name)
@@ -131,12 +147,13 @@ export default async function handler(req: Request): Promise<Response> {
       returning name, description, capital::text as capital;
     `
 
-    return json({
+    sendJson(res, {
       ok: true,
       business: rows[0] ?? existing,
       stars: await loadStars(userId),
     })
+    return
   }
 
-  return new Response('Method Not Allowed', { status: 405 })
+  sendText(res, 'Method Not Allowed', 405)
 }
