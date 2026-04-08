@@ -1,4 +1,4 @@
-import { ensureUser, getUserById, upsertUserProfile } from './_lib/db.js'
+import { ensureUser, getUserById, migrateAnonymousUserData, upsertUserProfile } from './_lib/db.js'
 import {
   getQueryParam,
   readJsonBody,
@@ -15,13 +15,17 @@ export const config = {
 export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
   if (req.method === 'POST') {
     const body = await readJsonBody<
-      | { userId?: string; username?: string | null; displayName?: string | null }
+      | { userId?: string; previousUserId?: string | null; username?: string | null; displayName?: string | null }
       | null
     >(req)
     const userId = body?.userId
     if (!userId) {
       sendJson(res, { error: 'userId is required' }, 400)
       return
+    }
+
+    if (typeof body?.previousUserId === 'string' && body.previousUserId.trim().length > 0) {
+      await migrateAnonymousUserData(body.previousUserId.trim(), userId)
     }
 
     await upsertUserProfile({

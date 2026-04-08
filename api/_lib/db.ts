@@ -18,6 +18,10 @@ export type UserProfileInput = {
   displayName?: string | null
 }
 
+function isAnonymousUserId(userId: string): boolean {
+  return userId.startsWith('anon_')
+}
+
 function normalizeOptionalText(value?: string | null): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -314,6 +318,84 @@ export async function upsertUserProfile(input: UserProfileInput) {
     set username = coalesce(excluded.username, users.username),
         display_name = coalesce(excluded.display_name, users.display_name),
         updated_at = now();
+  `
+}
+
+export async function migrateAnonymousUserData(previousUserId: string, nextUserId: string) {
+  await ensureSchema()
+  if (!isAnonymousUserId(previousUserId) || previousUserId === nextUserId) return
+
+  await ensureUser(nextUserId)
+
+  await sql`
+    update users as target
+    set stars = greatest(target.stars, source.stars),
+        updated_at = now()
+    from users as source
+    where target.tg_user_id = ${nextUserId}
+      and source.tg_user_id = ${previousUserId};
+  `
+
+  await sql`
+    insert into inventory (user_id, card_id, qty)
+    select ${nextUserId}, card_id, qty
+    from inventory
+    where user_id = ${previousUserId}
+    on conflict (user_id, card_id)
+    do update set qty = inventory.qty + excluded.qty;
+  `
+
+  await sql`
+    delete from inventory
+    where user_id = ${previousUserId};
+  `
+
+  await sql`
+    insert into friend_requests (from_user_id, to_user_id, status, created_at, updated_at)
+    select ${nextUserId}, to_user_id, status, created_at, updated_at
+    from friend_requests
+    where from_user_id = ${previousUserId}
+      and to_user_id <> ${nextUserId}
+    on conflict (from_user_id, to_user_id)
+    do update set
+      status = case
+        when friend_requests.status = 'accepted' or excluded.status = 'accepted' then 'accepted'
+        else excluded.status
+      end,
+      updated_at = greatest(friend_requests.updated_at, excluded.updated_at);
+  `
+
+  await sql`
+    insert into friend_requests (from_user_id, to_user_id, status, created_at, updated_at)
+    select from_user_id, ${nextUserId}, status, created_at, updated_at
+    from friend_requests
+    where to_user_id = ${previousUserId}
+      and from_user_id <> ${nextUserId}
+    on conflict (from_user_id, to_user_id)
+    do update set
+      status = case
+        when friend_requests.status = 'accepted' or excluded.status = 'accepted' then 'accepted'
+        else excluded.status
+      end,
+      updated_at = greatest(friend_requests.updated_at, excluded.updated_at);
+  `
+
+  await sql`
+    delete from friend_requests
+    where from_user_id = ${previousUserId}
+       or to_user_id = ${previousUserId};
+  `
+
+  await sql`
+    update business_staff
+    set employee_user_id = ${nextUserId},
+        updated_at = now()
+    where employee_user_id = ${previousUserId}
+      and not exists (
+        select 1
+        from business_staff existing
+        where existing.employee_user_id = ${nextUserId}
+      );
   `
 }
 

@@ -1970,6 +1970,42 @@ body {
   height: 46px;
 }
 
+.edgeBusinessInfoButton {
+  position: fixed;
+  left: 12px;
+  top: calc(50% - 84px);
+  transform: translateY(-50%);
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 35;
+  backdrop-filter: blur(8px);
+}
+
+.edgeBusinessInfoButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.edgeBusinessInfoButton:active {
+  transform: translateY(-50%) scale(0.97);
+}
+
+.edgeBusinessInfoButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.edgeBusinessInfoButton svg {
+  width: 46px;
+  height: 46px;
+}
+
 .edgeGardenButton {
   position: fixed;
   right: 12px;
@@ -2896,6 +2932,17 @@ body.inventoryDragActive {
     top: calc(50% + 88px);
     width: 58px;
     height: 58px;
+  }
+
+  .edgeBusinessInfoButton {
+    top: calc(50% - 72px);
+    width: 52px;
+    height: 52px;
+  }
+
+  .edgeBusinessInfoButton svg {
+    width: 42px;
+    height: 42px;
   }
 
   .edgeRouletteButton svg {

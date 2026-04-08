@@ -269,6 +269,10 @@ function getUserId(): string {
   return `anon_${anon}`
 }
 
+function isAnonymousUserId(userId: string): boolean {
+  return userId.startsWith('anon_')
+}
+
 function getTelegramIdentity(userId: string): TelegramIdentity {
   const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user
   const username =
@@ -829,6 +833,20 @@ function CoinIcon({ className }: { className?: string }) {
       <path d="M26 32h12" fill="none" stroke="#090909" strokeWidth="2.8" strokeLinecap="round" />
       <path d="M32 26v12" fill="none" stroke="#090909" strokeWidth="2.8" strokeLinecap="round" />
       <path d="M22 18c3-2.8 6.8-4 10-4" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" opacity="0.92" />
+    </svg>
+  )
+}
+
+function BusinessInfoIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 54V19.5c0-2.5 2-4.5 4.5-4.5h15c2.5 0 4.5 2 4.5 4.5V54" />
+        <path d="M16 54h32" />
+        <path d="M26 24h3M35 24h3M26 31h3M35 31h3M26 38h3M35 38h3" />
+        <circle cx="50" cy="18" r="7.5" />
+        <path d="M50 15v6M50 28h.01" />
+      </g>
     </svg>
   )
 }
@@ -2277,6 +2295,7 @@ function BusinessPanel({
   onStarsChange,
   onClose,
   onBusinessChange,
+  onBusinessModeChange,
   variant = 'panel',
 }: {
   userId: string
@@ -2284,6 +2303,7 @@ function BusinessPanel({
   onStarsChange: (nextStars: string) => void
   onClose?: () => void
   onBusinessChange?: (business: BusinessProfile | null) => void
+  onBusinessModeChange?: (mode: BusinessMode) => void
   variant?: 'panel' | 'page'
 }) {
   const [mode, setMode] = useState<BusinessMode>('none')
@@ -2302,6 +2322,9 @@ function BusinessPanel({
   const [businessDescription, setBusinessDescription] = useState('')
   const emitBusinessChange = useEffectEvent((nextBusiness: BusinessProfile | null) => {
     onBusinessChange?.(nextBusiness)
+  })
+  const emitBusinessModeChange = useEffectEvent((nextMode: BusinessMode) => {
+    onBusinessModeChange?.(nextMode)
   })
   const emitStarsChange = useEffectEvent((nextStars: string) => {
     onStarsChange(nextStars)
@@ -2322,6 +2345,7 @@ function BusinessPanel({
     setBusinessName(nextBusiness?.name ?? '')
     setBusinessDescription(nextBusiness?.description ?? '')
     emitBusinessChange(nextBusiness)
+    emitBusinessModeChange(nextMode)
 
     if (nextMode === 'owner' && nextBusiness) {
       saveLocalBusiness(userId, nextBusiness)
@@ -2856,7 +2880,8 @@ function BusinessPanel({
 }
 
 function App() {
-  const userId = useMemo(() => getUserId(), [])
+  const [userId, setUserId] = useState(() => getUserId())
+  const pendingMigrationUserIdRef = useRef<string | null>(null)
   const telegramIdentity = useMemo(() => getTelegramIdentity(userId), [userId])
   const [tab, setTab] = useState<TabKey>('home')
   const [isPackOpen, setIsPackOpen] = useState(false)
@@ -2869,6 +2894,7 @@ function App() {
   const [didRewardThisOpen, setDidRewardThisOpen] = useState(false)
   const [rewardCard, setRewardCard] = useState<CardDef | null>(null)
   const [stars, setStars] = useState('0')
+  const [businessMode, setBusinessMode] = useState<BusinessMode>('none')
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(() => loadLocalBusiness(userId))
   const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
   const hasApartment = useMemo(
@@ -2879,6 +2905,36 @@ function App() {
     () => (hasApartment ? getHomeBackgroundById(selectedHomeBackgroundId) : null),
     [hasApartment, selectedHomeBackgroundId]
   )
+
+  useEffect(() => {
+    if (!isAnonymousUserId(userId)) return
+
+    const syncTelegramUser = () => {
+      const nextUserId = getUserId()
+      if (nextUserId === userId || isAnonymousUserId(nextUserId)) return false
+      pendingMigrationUserIdRef.current = userId
+      setUserId(nextUserId)
+      return true
+    }
+
+    if (syncTelegramUser()) return
+
+    let attempts = 0
+    const intervalId = window.setInterval(() => {
+      attempts += 1
+      if (syncTelegramUser() || attempts >= 24) {
+        window.clearInterval(intervalId)
+      }
+    }, 350)
+
+    return () => window.clearInterval(intervalId)
+  }, [userId])
+
+  useEffect(() => {
+    setBusinessProfile(loadLocalBusiness(userId))
+    setBusinessMode(loadLocalBusiness(userId) ? 'owner' : 'none')
+    setSelectedHomeBackgroundId(loadHomeBackground(userId))
+  }, [userId])
 
   useEffect(() => {
     if (!isPackOpen) return
@@ -2901,11 +2957,13 @@ function App() {
     const fallbackStars = getFallbackStars(userId)
     setStars(fallbackStars)
     try {
+      const previousUserId = pendingMigrationUserIdRef.current
       const r = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           userId,
+          previousUserId,
           username: telegramIdentity.username,
           displayName: telegramIdentity.displayName,
         }),
@@ -2915,6 +2973,7 @@ function App() {
       const nextStars = typeof data.stars === 'string' ? data.stars : fallbackStars
       setStars(nextStars)
       saveLocalStars(userId, nextStars)
+      pendingMigrationUserIdRef.current = null
     } catch {
       setStars(fallbackStars)
     }
@@ -2987,6 +3046,7 @@ function App() {
           ?? createLocalBusinessPayload(userId, localBusiness)
       }
 
+      setBusinessMode(nextPayload.mode ?? (nextPayload.business ? 'owner' : 'none'))
       setBusinessProfile(nextPayload.business ?? null)
       if (nextPayload.mode === 'owner' && nextPayload.business) {
         saveLocalBusiness(userId, nextPayload.business)
@@ -2997,6 +3057,7 @@ function App() {
         saveLocalStars(userId, nextPayload.stars)
       }
     } catch {
+      setBusinessMode(localBusiness ? 'owner' : 'none')
       setBusinessProfile(localBusiness)
     }
   }, [userId])
@@ -3116,6 +3177,16 @@ function App() {
             >
               <FriendsIcon />
             </button>
+            {businessMode === 'employee' && businessProfile && (
+              <button
+                type="button"
+                className="edgeBusinessInfoButton"
+                aria-label="Информация о бизнесе"
+                onClick={() => setTab('business')}
+              >
+                <BusinessInfoIcon />
+              </button>
+            )}
             {!businessProfile && (
               <button
                 type="button"
@@ -3187,6 +3258,7 @@ function App() {
               setStars(nextStars)
               saveLocalStars(userId, nextStars)
             }}
+            onBusinessModeChange={setBusinessMode}
             onBusinessChange={(nextBusiness) => {
               setBusinessProfile(nextBusiness)
             }}
@@ -3292,6 +3364,7 @@ function App() {
                 setStars(nextStars)
                 saveLocalStars(userId, nextStars)
               }}
+              onBusinessModeChange={setBusinessMode}
               onBusinessChange={(nextBusiness) => {
                 setBusinessProfile(nextBusiness)
                 if (nextBusiness) {
