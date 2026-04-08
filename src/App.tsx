@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ComponentType } from 'react'
 
 type TabKey = 'home' | 'inventory' | 'friends' | 'customize' | 'business'
 
@@ -2038,6 +2038,15 @@ function BusinessPanel({
   const [notice, setNotice] = useState<string | null>(null)
   const [businessName, setBusinessName] = useState('')
   const [businessDescription, setBusinessDescription] = useState('')
+  const emitBusinessChange = useEffectEvent((nextBusiness: BusinessProfile | null) => {
+    onBusinessChange?.(nextBusiness)
+  })
+  const emitStarsChange = useEffectEvent((nextStars: string) => {
+    onStarsChange(nextStars)
+  })
+  const emitClose = useEffectEvent(() => {
+    onClose?.()
+  })
 
   useEffect(() => {
     setTeam(loadBusinessTeam(userId))
@@ -2062,22 +2071,22 @@ function BusinessPanel({
       setBusiness(nextBusiness)
       setBusinessName(nextBusiness?.name ?? '')
       setBusinessDescription(nextBusiness?.description ?? '')
-      onBusinessChange?.(nextBusiness)
+      emitBusinessChange(nextBusiness)
       if (nextBusiness) {
         saveLocalBusiness(userId, nextBusiness)
       }
       if (typeof nextStars === 'string') {
-        onStarsChange(nextStars)
+        emitStarsChange(nextStars)
       }
     } catch {
       setBusiness(localBusiness)
       setBusinessName(localBusiness?.name ?? '')
       setBusinessDescription(localBusiness?.description ?? '')
-      onBusinessChange?.(localBusiness)
+      emitBusinessChange(localBusiness)
     } finally {
       setLoadingBusiness(false)
     }
-  }, [onBusinessChange, onStarsChange, userId])
+  }, [userId])
 
   useEffect(() => {
     void loadBusiness()
@@ -2169,14 +2178,14 @@ function BusinessPanel({
         capital: String(BUSINESS_START_CAPITAL),
       }
       setBusiness(nextBusiness)
-      onBusinessChange?.(nextBusiness)
+      emitBusinessChange(nextBusiness)
       setBusinessName(nextBusiness.name)
       setBusinessDescription(nextBusiness.description)
       saveLocalBusiness(userId, nextBusiness)
       if (typeof data?.stars === 'string') {
-        onStarsChange(data.stars)
+        emitStarsChange(data.stars)
       }
-      onClose?.()
+      emitClose()
     } catch (error) {
       if (
         error instanceof Error &&
@@ -2200,17 +2209,17 @@ function BusinessPanel({
         capital: String(BUSINESS_START_CAPITAL),
       }
       setBusiness(nextBusiness)
-      onBusinessChange?.(nextBusiness)
+      emitBusinessChange(nextBusiness)
       setBusinessName(nextBusiness.name)
       setBusinessDescription(nextBusiness.description)
       saveLocalBusiness(userId, nextBusiness)
       saveLocalStars(userId, nextStars)
-      onStarsChange(nextStars)
-      onClose?.()
+      emitStarsChange(nextStars)
+      emitClose()
     } finally {
       setSavingBusiness(false)
     }
-  }, [businessDescription, businessName, onBusinessChange, onClose, onStarsChange, stars, userId])
+  }, [businessDescription, businessName, stars, userId])
 
   const handleSaveBusiness = useCallback(async () => {
     if (!business) return
@@ -2238,10 +2247,10 @@ function BusinessPanel({
         description: normalizedDescription,
       }
       setBusiness(nextBusiness)
-      onBusinessChange?.(nextBusiness)
+      emitBusinessChange(nextBusiness)
       saveLocalBusiness(userId, nextBusiness)
       if (typeof data?.stars === 'string') {
-        onStarsChange(data.stars)
+        emitStarsChange(data.stars)
       }
     } catch (error) {
       const nextBusiness = {
@@ -2250,12 +2259,12 @@ function BusinessPanel({
         description: normalizedDescription,
       }
       setBusiness(nextBusiness)
-      onBusinessChange?.(nextBusiness)
+      emitBusinessChange(nextBusiness)
       saveLocalBusiness(userId, nextBusiness)
     } finally {
       setSavingBusiness(false)
     }
-  }, [business, businessDescription, businessName, onBusinessChange, onStarsChange, userId])
+  }, [business, businessDescription, businessName, userId])
 
   return (
     <section className={variant === 'page' ? 'businessPanel businessPage' : 'panel businessPanel'}>
