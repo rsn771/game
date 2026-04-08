@@ -686,6 +686,97 @@ body {
   font-size: 13px;
 }
 
+.businessUnlockCard,
+.businessInfoCard {
+  display: grid;
+  gap: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.businessField {
+  display: grid;
+  gap: 8px;
+}
+
+.businessField span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.68);
+  text-transform: uppercase;
+}
+
+.businessInput,
+.businessTextarea {
+  width: 100%;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fg);
+  padding: 12px 14px;
+  font: inherit;
+}
+
+.businessInput::placeholder,
+.businessTextarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.businessTextarea {
+  resize: vertical;
+  min-height: 92px;
+}
+
+.businessCapitalRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.businessCapitalLabel {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.businessCapitalValue {
+  font-size: 16px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.96);
+  font-variant-numeric: tabular-nums;
+}
+
+.businessPrimaryButton {
+  appearance: none;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  color: var(--fg);
+  padding: 13px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.businessPrimaryButton:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+}
+
+.businessPrimaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .businessGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -919,6 +1010,47 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.apartmentThemeOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(12px);
+}
+
+.apartmentThemeModal {
+  width: min(94vw, 520px);
+  max-height: 82vh;
+  overflow-y: auto;
+  border-radius: 24px;
+  border: 1px solid var(--line-strong);
+  background: rgba(0, 0, 0, 0.94);
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.apartmentThemeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.apartmentThemeHeader h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.apartmentThemeHint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .customizePanelHeader h2 {

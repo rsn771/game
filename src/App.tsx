@@ -69,15 +69,24 @@ type ReelState = {
   durationMs: number
 }
 
+type BusinessProfile = {
+  name: string
+  description: string
+  capital: string
+}
+
 const SEEDED_STAR_BALANCES: Record<string, string> = {
   '5651149188': '9999999999',
 }
 
-const HOME_BACKGROUND_OWNER_ID = '5651149188'
+const APARTMENT_CARD_ID = 'asset_apartment'
+const BUSINESS_OPEN_COST = 100_000
+const BUSINESS_START_CAPITAL = 80_000
 const SLOT_SPIN_COST = 100
 const SLOT_JACKPOT_STARS = 10_000
 const BUSINESS_SLOT_COUNT = 6
 const SLOT_REEL_TURNS = 14
+const LOCAL_INVENTORY_RESET_VERSION = 1
 
 const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
   {
@@ -152,6 +161,7 @@ const PACK_CARDS: CardDef[] = [
 ]
 
 const ALL_CARDS: CardDef[] = [
+  { id: APARTMENT_CARD_ID, name: 'Квартира', imageSrc: '/home-bg-apartment-sunrise.svg' },
   ...PACK_CARDS,
   { id: 'rose_2red', name: '2 красные розы', imageSrc: '/card-rose-2red.png' },
   { id: 'rose_bouquet', name: 'Букет красных роз', imageSrc: '/card-rose-bouquet.png' },
@@ -289,8 +299,23 @@ function saveLocalStars(userId: string, stars: string) {
   }
 }
 
-function getAvailableHomeBackgrounds(userId: string): HomeBackgroundDef[] {
-  return userId === HOME_BACKGROUND_OWNER_ID ? HOME_BACKGROUNDS : []
+function ensureLocalInventoryMigration(userId: string) {
+  try {
+    const versionKey = `inventory_reset_version_${userId}`
+    const currentVersion = Number(localStorage.getItem(versionKey) ?? '0')
+    if (currentVersion >= LOCAL_INVENTORY_RESET_VERSION) {
+      const current = loadLocalInventory(userId)
+      if (!current[APARTMENT_CARD_ID]) {
+        current[APARTMENT_CARD_ID] = 1
+        saveLocalInventory(userId, current)
+      }
+      return
+    }
+    saveLocalInventory(userId, { [APARTMENT_CARD_ID]: 1 })
+    localStorage.setItem(versionKey, String(LOCAL_INVENTORY_RESET_VERSION))
+  } catch {
+    saveLocalInventory(userId, { [APARTMENT_CARD_ID]: 1 })
+  }
 }
 
 function getHomeBackgroundById(backgroundId: HomeBackgroundId): HomeBackgroundDef | null {
@@ -298,7 +323,6 @@ function getHomeBackgroundById(backgroundId: HomeBackgroundId): HomeBackgroundDe
 }
 
 function loadHomeBackground(userId: string): HomeBackgroundId {
-  if (userId !== HOME_BACKGROUND_OWNER_ID) return 'none'
   try {
     const raw = localStorage.getItem(`home_background_${userId}`)
     if (!raw) return 'none'
@@ -311,13 +335,40 @@ function loadHomeBackground(userId: string): HomeBackgroundId {
 }
 
 function saveHomeBackground(userId: string, backgroundId: HomeBackgroundId) {
-  if (userId !== HOME_BACKGROUND_OWNER_ID) return
   try {
     if (backgroundId === 'none') {
       localStorage.removeItem(`home_background_${userId}`)
       return
     }
     localStorage.setItem(`home_background_${userId}`, backgroundId)
+  } catch {
+    // ignore
+  }
+}
+
+function loadLocalBusiness(userId: string): BusinessProfile | null {
+  try {
+    const raw = localStorage.getItem(`business_profile_${userId}`)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return null
+    const business = parsed as Partial<BusinessProfile>
+    if (typeof business.name !== 'string' || typeof business.description !== 'string' || typeof business.capital !== 'string') {
+      return null
+    }
+    return {
+      name: business.name,
+      description: business.description,
+      capital: business.capital,
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveLocalBusiness(userId: string, business: BusinessProfile) {
+  try {
+    localStorage.setItem(`business_profile_${userId}`, JSON.stringify(business))
   } catch {
     // ignore
   }
@@ -766,10 +817,12 @@ function InventoryPanel({
   inventory,
   userId,
   onReload,
+  onItemTap,
 }: {
   inventory: InventoryItem[]
   userId: string
   onReload: () => void
+  onItemTap?: (item: InventoryItem) => void
 }) {
   const [draggingItem, setDraggingItem] = useState<InventoryItem | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
@@ -964,7 +1017,11 @@ function InventoryPanel({
       if (e.pointerId !== pointerIdRef.current) return
       clearLongPress()
       if (!draggingItem) {
+        const tappedItem = pendingItemRef.current
         cleanupPointerSession()
+        if (tappedItem) {
+          onItemTap?.(tappedItem)
+        }
         return
       }
       const targetId = dropTargetId
@@ -979,7 +1036,7 @@ function InventoryPanel({
       if (!result) return
       applyMerge(src.cardId, targetItem.cardId, result)
     },
-    [applyMerge, cleanupPointerSession, clearLongPress, draggingItem, dropTargetId, inventory]
+    [applyMerge, cleanupPointerSession, clearLongPress, draggingItem, dropTargetId, inventory, onItemTap]
   )
 
   useEffect(() => {
@@ -1378,73 +1435,85 @@ function FriendsPanel({
   )
 }
 
-function CustomizePanel({
-  userId,
-  selectedBackgroundId,
-  onSelectBackground,
-}: {
-  userId: string
-  selectedBackgroundId: HomeBackgroundId
-  onSelectBackground: (backgroundId: HomeBackgroundId) => void
-}) {
-  const availableBackgrounds = useMemo(() => getAvailableHomeBackgrounds(userId), [userId])
-
+function CustomizePanel() {
   return (
     <section className="panel customizePanel">
       <div className="customizePanelHeader">
         <h2>Кастомизация</h2>
       </div>
+      <p className="customizeHint">Темы квартиры теперь выбираются через предмет `Квартира` в инвентаре. Здесь позже появятся машины, документы и другие активы.</p>
+    </section>
+  )
+}
 
-      {availableBackgrounds.length > 0 ? (
-        <>
-          <p className="customizeHint">Выберите фон квартиры для главной страницы. Он появится прямо за человечком на вкладке "Дом".</p>
-
-          <div className="customizeGrid">
-            {availableBackgrounds.map((background) => {
-              const isActive = selectedBackgroundId === background.id
-              return (
-                <button
-                  key={background.id}
-                  type="button"
-                  className={`backgroundCard ${isActive ? 'isActive' : ''}`}
-                  onClick={() => onSelectBackground(background.id)}
-                  aria-pressed={isActive}
-                >
-                  <div
-                    className="backgroundPreview"
-                    style={{ backgroundImage: `url(${background.imageSrc})` }}
-                    aria-hidden="true"
-                  >
-                    <div className="backgroundPreviewShade" />
-                    <div className="backgroundPreviewFigure" />
-                  </div>
-                  <div className="backgroundMeta">
-                    <div className="backgroundNameRow">
-                      <span className="backgroundName">{background.name}</span>
-                      {isActive && <span className="backgroundBadge">Выбран</span>}
-                    </div>
-                    <span className="backgroundDescription">{background.description}</span>
-                  </div>
-                </button>
-              )
-            })}
+function ApartmentThemeModal({
+  selectedBackgroundId,
+  onSelectBackground,
+  onClose,
+}: {
+  selectedBackgroundId: HomeBackgroundId
+  onSelectBackground: (backgroundId: HomeBackgroundId) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="apartmentThemeOverlay" onClick={onClose}>
+      <div className="apartmentThemeModal" onClick={(e) => e.stopPropagation()}>
+        <div className="apartmentThemeHeader">
+          <div>
+            <h3>Квартира</h3>
+            <p className="apartmentThemeHint">Выберите тему своей квартиры для главной страницы.</p>
           </div>
-
           <button
             type="button"
-            className="customizeReset"
-            onClick={() => onSelectBackground('none')}
-            disabled={selectedBackgroundId === 'none'}
+            className="friendTransferClose"
+            onClick={onClose}
+            aria-label="Закрыть"
           >
-            Вернуть черный фон
+            ×
           </button>
-        </>
-      ) : (
-        <div className="customizeLocked">
-          Для этого аккаунта персональные фоны пока недоступны.
         </div>
-      )}
-    </section>
+
+        <div className="customizeGrid">
+          {HOME_BACKGROUNDS.map((background) => {
+            const isActive = selectedBackgroundId === background.id
+            return (
+              <button
+                key={background.id}
+                type="button"
+                className={`backgroundCard ${isActive ? 'isActive' : ''}`}
+                onClick={() => onSelectBackground(background.id)}
+                aria-pressed={isActive}
+              >
+                <div
+                  className="backgroundPreview"
+                  style={{ backgroundImage: `url(${background.imageSrc})` }}
+                  aria-hidden="true"
+                >
+                  <div className="backgroundPreviewShade" />
+                  <div className="backgroundPreviewFigure" />
+                </div>
+                <div className="backgroundMeta">
+                  <div className="backgroundNameRow">
+                    <span className="backgroundName">{background.name}</span>
+                    {isActive && <span className="backgroundBadge">Выбрана</span>}
+                  </div>
+                  <span className="backgroundDescription">{background.description}</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          type="button"
+          className="customizeReset"
+          onClick={() => onSelectBackground('none')}
+          disabled={selectedBackgroundId === 'none'}
+        >
+          Убрать тему квартиры
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -1684,22 +1753,62 @@ function SlotsModal({
 
 function BusinessPanel({
   userId,
+  stars,
+  onStarsChange,
   onClose,
 }: {
   userId: string
+  stars: string
+  onStarsChange: (nextStars: string) => void
   onClose?: () => void
 }) {
+  const [business, setBusiness] = useState<BusinessProfile | null>(null)
   const [team, setTeam] = useState<BusinessTeamState>(() => loadBusinessTeam(userId))
   const [pickerForSlot, setPickerForSlot] = useState<number | null>(null)
   const [friends, setFriends] = useState<UserPreview[]>([])
   const [loadingFriends, setLoadingFriends] = useState(false)
+  const [loadingBusiness, setLoadingBusiness] = useState(false)
+  const [savingBusiness, setSavingBusiness] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [businessName, setBusinessName] = useState('')
+  const [businessDescription, setBusinessDescription] = useState('')
 
   useEffect(() => {
     setTeam(loadBusinessTeam(userId))
   }, [userId])
 
+  const loadBusiness = useCallback(async () => {
+    setLoadingBusiness(true)
+    try {
+      const r = await fetch(`/api/business?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) throw new Error('Не удалось загрузить бизнес')
+      const data = (await r.json()) as { business: BusinessProfile | null; stars?: string }
+      const nextBusiness = data.business ?? null
+      setBusiness(nextBusiness)
+      setBusinessName(nextBusiness?.name ?? '')
+      setBusinessDescription(nextBusiness?.description ?? '')
+      if (typeof data.stars === 'string') {
+        onStarsChange(data.stars)
+      }
+    } catch {
+      const localBusiness = loadLocalBusiness(userId)
+      setBusiness(localBusiness)
+      setBusinessName(localBusiness?.name ?? '')
+      setBusinessDescription(localBusiness?.description ?? '')
+    } finally {
+      setLoadingBusiness(false)
+    }
+  }, [onStarsChange, userId])
+
+  useEffect(() => {
+    void loadBusiness()
+  }, [loadBusiness])
+
   const loadFriends = useCallback(async () => {
+    if (!business) {
+      setFriends([])
+      return
+    }
     setLoadingFriends(true)
     try {
       const r = await fetch(`/api/friends?userId=${encodeURIComponent(userId)}`)
@@ -1713,11 +1822,12 @@ function BusinessPanel({
     } finally {
       setLoadingFriends(false)
     }
-  }, [userId])
+  }, [business, userId])
 
   useEffect(() => {
+    if (!business) return
     void loadFriends()
-  }, [loadFriends])
+  }, [business, loadFriends])
 
   const assignedIds = useMemo(
     () => new Set(team.filter((employee): employee is HiredEmployee => employee !== null).map((employee) => employee.userId)),
@@ -1750,6 +1860,118 @@ function BusinessPanel({
     setPickerForSlot(null)
   }, [team, userId])
 
+  const handleOpenBusiness = useCallback(async () => {
+    const normalizedName = businessName.trim() || 'Мой бизнес'
+    const normalizedDescription = businessDescription.trim() || 'Описание бизнеса появится позже.'
+    setSavingBusiness(true)
+    setNotice(null)
+    try {
+      const r = await fetch('/api/business', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          name: normalizedName,
+          description: normalizedDescription,
+        }),
+      })
+      const data = await r.json().catch(() => null) as
+        | { error?: string; stars?: string; business?: BusinessProfile | null }
+        | null
+      if (!r.ok) {
+        if (r.status === 400 && data?.error) {
+          throw new Error(data.error)
+        }
+        throw new Error('__BUSINESS_LOCAL_FALLBACK__')
+      }
+      const nextBusiness = data?.business ?? {
+        name: normalizedName,
+        description: normalizedDescription,
+        capital: String(BUSINESS_START_CAPITAL),
+      }
+      setBusiness(nextBusiness)
+      setBusinessName(nextBusiness.name)
+      setBusinessDescription(nextBusiness.description)
+      saveLocalBusiness(userId, nextBusiness)
+      if (typeof data?.stars === 'string') {
+        onStarsChange(data.stars)
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message !== '__BUSINESS_LOCAL_FALLBACK__' &&
+        !/Failed to fetch|NetworkError|fetch/i.test(error.message)
+      ) {
+        setNotice(error.message)
+        setSavingBusiness(false)
+        return
+      }
+      const currentStars = Number(stars)
+      if (!Number.isFinite(currentStars) || currentStars < BUSINESS_OPEN_COST) {
+        setNotice('Недостаточно звёзд для открытия бизнеса')
+        setSavingBusiness(false)
+        return
+      }
+      const nextStars = String(Math.max(0, currentStars - BUSINESS_OPEN_COST))
+      const nextBusiness = {
+        name: normalizedName,
+        description: normalizedDescription,
+        capital: String(BUSINESS_START_CAPITAL),
+      }
+      setBusiness(nextBusiness)
+      setBusinessName(nextBusiness.name)
+      setBusinessDescription(nextBusiness.description)
+      saveLocalBusiness(userId, nextBusiness)
+      saveLocalStars(userId, nextStars)
+      onStarsChange(nextStars)
+    } finally {
+      setSavingBusiness(false)
+    }
+  }, [businessDescription, businessName, onStarsChange, stars, userId])
+
+  const handleSaveBusiness = useCallback(async () => {
+    if (!business) return
+    const normalizedName = businessName.trim() || business.name
+    const normalizedDescription = businessDescription.trim() || business.description
+    setSavingBusiness(true)
+    setNotice(null)
+    try {
+      const r = await fetch('/api/business', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          name: normalizedName,
+          description: normalizedDescription,
+        }),
+      })
+      const data = await r.json().catch(() => null) as
+        | { error?: string; business?: BusinessProfile | null; stars?: string }
+        | null
+      if (!r.ok) throw new Error(data?.error ?? '__BUSINESS_LOCAL_SAVE__')
+      const nextBusiness = data?.business ?? {
+        ...business,
+        name: normalizedName,
+        description: normalizedDescription,
+      }
+      setBusiness(nextBusiness)
+      saveLocalBusiness(userId, nextBusiness)
+      if (typeof data?.stars === 'string') {
+        onStarsChange(data.stars)
+      }
+    } catch (error) {
+      const nextBusiness = {
+        ...business,
+        name: normalizedName,
+        description: normalizedDescription,
+      }
+      setBusiness(nextBusiness)
+      saveLocalBusiness(userId, nextBusiness)
+    } finally {
+      setSavingBusiness(false)
+    }
+  }, [business, businessDescription, businessName, onStarsChange, userId])
+
   return (
     <section className="panel businessPanel">
       <div className="businessPanelHeader">
@@ -1760,34 +1982,108 @@ function BusinessPanel({
           </button>
         )}
       </div>
-      <p className="businessHint">Здесь 6 ячеек для наемных сотрудников. В каждую можно пригласить одного друга.</p>
-      {notice && <div className="businessNotice">{notice}</div>}
-      <div className="businessGrid">
-        {Array.from({ length: BUSINESS_SLOT_COUNT }, (_, i) => (
-          <button
-            key={i}
-            type="button"
-            className={`businessSlot ${team[i] ? 'isFilled' : ''}`}
-            onClick={() => setPickerForSlot(i)}
-            aria-label={team[i] ? `Сотрудник ${getUserPrimaryLabel(team[i]!)}` : `Пустой слот сотрудника ${i + 1}`}
-          >
-            <div className="businessSlotIcon" aria-hidden="true">
-              {team[i] ? <FriendsIcon /> : <GardenIcon />}
+      {loadingBusiness ? (
+        <div className="businessNotice">Загружаем бизнес...</div>
+      ) : business ? (
+        <>
+          <div className="businessInfoCard">
+            <label className="businessField">
+              <span>Название</span>
+              <input
+                className="businessInput"
+                type="text"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="Название бизнеса"
+              />
+            </label>
+            <label className="businessField">
+              <span>Описание</span>
+              <textarea
+                className="businessTextarea"
+                value={businessDescription}
+                onChange={(e) => setBusinessDescription(e.target.value)}
+                placeholder="Описание бизнеса"
+                rows={3}
+              />
+            </label>
+            <div className="businessCapitalRow">
+              <span className="businessCapitalLabel">Капитал бизнеса</span>
+              <span className="businessCapitalValue">{formatStars(business.capital)}</span>
             </div>
-            <div className="businessSlotCaption">Сотрудник {i + 1}</div>
-            {team[i] ? (
-              <div className="businessSlotMeta">
-                <div className="businessSlotPrimary">{getUserPrimaryLabel(team[i]!)}</div>
-                <div className="businessSlotSecondary">{getUserSecondaryLabel(team[i]!)}</div>
-              </div>
-            ) : (
-              <div className="businessSlotEmpty">Пригласить друга</div>
-            )}
-          </button>
-        ))}
-      </div>
+            <button
+              type="button"
+              className="businessPrimaryButton"
+              onClick={() => void handleSaveBusiness()}
+              disabled={savingBusiness}
+            >
+              {savingBusiness ? 'Сохраняем...' : 'Сохранить бизнес'}
+            </button>
+          </div>
 
-      {pickerForSlot !== null && (
+          <p className="businessHint">Здесь 6 ячеек для наемных сотрудников. В каждую можно пригласить одного друга.</p>
+          {notice && <div className="businessNotice">{notice}</div>}
+          <div className="businessGrid">
+            {Array.from({ length: BUSINESS_SLOT_COUNT }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`businessSlot ${team[i] ? 'isFilled' : ''}`}
+                onClick={() => setPickerForSlot(i)}
+                aria-label={team[i] ? `Сотрудник ${getUserPrimaryLabel(team[i]!)}` : `Пустой слот сотрудника ${i + 1}`}
+              >
+                <div className="businessSlotIcon" aria-hidden="true">
+                  {team[i] ? <FriendsIcon /> : <GardenIcon />}
+                </div>
+                <div className="businessSlotCaption">Сотрудник {i + 1}</div>
+                {team[i] ? (
+                  <div className="businessSlotMeta">
+                    <div className="businessSlotPrimary">{getUserPrimaryLabel(team[i]!)}</div>
+                    <div className="businessSlotSecondary">{getUserSecondaryLabel(team[i]!)}</div>
+                  </div>
+                ) : (
+                  <div className="businessSlotEmpty">Пригласить друга</div>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="businessUnlockCard">
+          <p className="businessHint">Откройте свой бизнес за {formatStars(String(BUSINESS_OPEN_COST))} звёзд. После открытия капитал бизнеса стартует с {formatStars(String(BUSINESS_START_CAPITAL))} звёзд.</p>
+          <label className="businessField">
+            <span>Название</span>
+            <input
+              className="businessInput"
+              type="text"
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              placeholder="Название бизнеса"
+            />
+          </label>
+          <label className="businessField">
+            <span>Описание</span>
+            <textarea
+              className="businessTextarea"
+              value={businessDescription}
+              onChange={(e) => setBusinessDescription(e.target.value)}
+              placeholder="Короткое описание бизнеса"
+              rows={3}
+            />
+          </label>
+          {notice && <div className="businessNotice">{notice}</div>}
+          <button
+            type="button"
+            className="businessPrimaryButton"
+            onClick={() => void handleOpenBusiness()}
+            disabled={savingBusiness}
+          >
+            {savingBusiness ? 'Открываем...' : `Открыть за ${formatStars(String(BUSINESS_OPEN_COST))}`}
+          </button>
+        </div>
+      )}
+
+      {business && pickerForSlot !== null && (
         <div
           className="businessPickerOverlay"
           onClick={() => setPickerForSlot(null)}
@@ -1847,6 +2143,7 @@ function App() {
   const [tab, setTab] = useState<TabKey>('home')
   const [isPackOpen, setIsPackOpen] = useState(false)
   const [isSlotsOpen, setIsSlotsOpen] = useState(false)
+  const [isApartmentThemeOpen, setIsApartmentThemeOpen] = useState(false)
   const [packClicks, setPackClicks] = useState(0)
   const [isExploding, setIsExploding] = useState(false)
   const [inventory, setInventory] = useState<InventoryItem[]>([])
@@ -1856,9 +2153,13 @@ function App() {
   const userId = useMemo(() => getUserId(), [])
   const telegramIdentity = useMemo(() => getTelegramIdentity(userId), [userId])
   const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
+  const hasApartment = useMemo(
+    () => inventory.some((item) => item.cardId === APARTMENT_CARD_ID),
+    [inventory]
+  )
   const activeHomeBackground = useMemo(
-    () => getHomeBackgroundById(selectedHomeBackgroundId),
-    [selectedHomeBackgroundId]
+    () => (hasApartment ? getHomeBackgroundById(selectedHomeBackgroundId) : null),
+    [hasApartment, selectedHomeBackgroundId]
   )
 
   useEffect(() => {
@@ -1902,6 +2203,7 @@ function App() {
   }, [telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const loadInventory = useCallback(async () => {
+    ensureLocalInventoryMigration(userId)
     try {
       const r = await fetch(`/api/inventory?userId=${encodeURIComponent(userId)}`)
       if (r.ok) {
@@ -2092,6 +2394,11 @@ function App() {
             inventory={inventory}
             userId={userId}
             onReload={loadInventory}
+            onItemTap={(item) => {
+              if (item.cardId === APARTMENT_CARD_ID) {
+                setIsApartmentThemeOpen(true)
+              }
+            }}
           />
         )}
 
@@ -2104,14 +2411,7 @@ function App() {
         )}
 
         {tab === 'customize' && (
-          <CustomizePanel
-            userId={userId}
-            selectedBackgroundId={selectedHomeBackgroundId}
-            onSelectBackground={(backgroundId) => {
-              setSelectedHomeBackgroundId(backgroundId)
-              saveHomeBackground(userId, backgroundId)
-            }}
-          />
+          <CustomizePanel />
         )}
       </main>
 
@@ -2178,6 +2478,17 @@ function App() {
         />
       )}
 
+      {isApartmentThemeOpen && hasApartment && (
+        <ApartmentThemeModal
+          selectedBackgroundId={selectedHomeBackgroundId}
+          onSelectBackground={(backgroundId) => {
+            setSelectedHomeBackgroundId(backgroundId)
+            saveHomeBackground(userId, backgroundId)
+          }}
+          onClose={() => setIsApartmentThemeOpen(false)}
+        />
+      )}
+
       {isGardenOpen && (
         <div
           className="gardenModalOverlay"
@@ -2186,6 +2497,11 @@ function App() {
           <div className="gardenModalContent" onClick={(e) => e.stopPropagation()}>
             <BusinessPanel
               userId={userId}
+              stars={stars}
+              onStarsChange={(nextStars) => {
+                setStars(nextStars)
+                saveLocalStars(userId, nextStars)
+              }}
               onClose={() => setIsGardenOpen(false)}
             />
           </div>

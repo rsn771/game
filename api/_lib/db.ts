@@ -4,6 +4,8 @@ const BONUS_USER_ID = '5651149188'
 const BONUS_STARS = 9_999_999_999
 const BONUS_SEED_VERSION = 1
 const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
+const STARTER_INVENTORY_CARD_ID = 'asset_apartment'
+const INVENTORY_RESET_VERSION = 1
 
 export type UserProfileInput = {
   userId: string
@@ -18,6 +20,14 @@ function normalizeOptionalText(value?: string | null): string | null {
 }
 
 async function seedCards() {
+  await sql`
+    insert into cards (id, name, image_src)
+    values ('asset_apartment', 'Квартира', '/home-bg-apartment-sunrise.svg')
+    on conflict (id) do update
+    set name = excluded.name,
+        image_src = excluded.image_src;
+  `
+
   await sql`
     insert into cards (id, name, image_src)
     values ('rose_red', 'Красная Роза', '/card-rose.png')
@@ -107,6 +117,44 @@ async function seedSearchableUsers() {
   }
 }
 
+async function seedStarterInventoryForUser(userId: string) {
+  await sql`
+    insert into inventory (user_id, card_id, qty)
+    values (${userId}, ${STARTER_INVENTORY_CARD_ID}, 1)
+    on conflict (user_id, card_id)
+    do update set qty = greatest(inventory.qty, excluded.qty);
+  `
+}
+
+async function resetInventoryIfNeeded() {
+  const { rows } = await sql<{ value: string }>`
+    select value
+    from app_meta
+    where key = 'inventory_reset_version'
+    limit 1;
+  `
+
+  const currentVersion = Number(rows[0]?.value ?? '0')
+  if (currentVersion >= INVENTORY_RESET_VERSION) return
+
+  await sql`delete from inventory;`
+
+  await sql`
+    insert into inventory (user_id, card_id, qty)
+    select tg_user_id, ${STARTER_INVENTORY_CARD_ID}, 1
+    from users
+    on conflict (user_id, card_id)
+    do update set qty = excluded.qty;
+  `
+
+  await sql`
+    insert into app_meta (key, value)
+    values ('inventory_reset_version', ${String(INVENTORY_RESET_VERSION)})
+    on conflict (key)
+    do update set value = excluded.value;
+  `
+}
+
 export async function ensureSchema() {
   await sql`
     create table if not exists users (
@@ -154,6 +202,24 @@ export async function ensureSchema() {
   `
 
   await sql`
+    create table if not exists businesses (
+      owner_user_id text primary key references users(tg_user_id) on delete cascade,
+      name text not null,
+      description text not null default '',
+      capital bigint not null default 80000,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  `
+
+  await sql`
+    create table if not exists app_meta (
+      key text primary key,
+      value text not null
+    );
+  `
+
+  await sql`
     create index if not exists users_username_lower_idx
     on users (lower(username));
   `
@@ -176,10 +242,12 @@ export async function ensureSchema() {
   await seedCards()
   await seedBonusUser()
   await seedSearchableUsers()
+  await resetInventoryIfNeeded()
 }
 
 export async function ensureUser(userId: string) {
   await upsertUserProfile({ userId })
+  await seedStarterInventoryForUser(userId)
 }
 
 export async function upsertUserProfile(input: UserProfileInput) {
