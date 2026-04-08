@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 
-type TabKey = 'home' | 'inventory' | 'friends' | 'customize'
+type TabKey = 'home' | 'inventory' | 'friends' | 'customize' | 'business'
 
 type CardDef = { id: string; name: string; imageSrc: string }
 
@@ -73,6 +73,22 @@ type BusinessProfile = {
   name: string
   description: string
   capital: string
+}
+
+type CustomizeCategoryId = 'pose' | 'headwear' | 'build' | 'hair' | 'face' | 'item'
+
+type CustomizeCategoryDef = {
+  id: CustomizeCategoryId
+  label: string
+  description: string
+  placement:
+    | 'top'
+    | 'topRight'
+    | 'right'
+    | 'bottomRight'
+    | 'bottomLeft'
+    | 'left'
+  Icon: ComponentType<{ className?: string }>
 }
 
 const SEEDED_STAR_BALANCES: Record<string, string> = {
@@ -699,6 +715,131 @@ function SearchIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
       <circle cx="10.5" cy="10.5" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path d="m15 15 4.2 4.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function PoseIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <circle cx="12" cy="5.25" r="2.15" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 7.9v4.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 10.5 7.7 13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 10.8 16.9 8.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 12.3 8.6 19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 12.3 16.9 17.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function HeadwearIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path
+        d="M6 11.2c.45-3.15 2.75-5.2 6-5.2s5.55 2.05 6 5.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4.4 11.9c1.7-.9 4.12-1.35 7.6-1.35 3.48 0 5.9.45 7.6 1.35"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M7.4 11.5v2.2c0 1.25 1.98 2.3 4.6 2.3s4.6-1.05 4.6-2.3v-2.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path d="M9.1 8.4h5.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function BuildIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <circle cx="12" cy="5.4" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M8.6 11.1c0-1.55 1.53-2.8 3.4-2.8s3.4 1.25 3.4 2.8v5.15c0 1.67-1.53 3.02-3.4 3.02s-3.4-1.35-3.4-3.02z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path d="M8.8 12.3H6.3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M17.7 12.3h-2.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function HairIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path
+        d="M6.6 11.9V9.8c0-3.02 2.42-5.48 5.4-5.48 2.98 0 5.4 2.46 5.4 5.48v2.1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M7.35 9.6c1.3-.85 2.55-1.72 3.8-2.6.62 1.2 1.92 1.98 3.96 2.33"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.4 13.7c.8 1.55 2.05 2.3 3.6 2.3s2.8-.75 3.6-2.3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function FaceIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <circle cx="12" cy="12" r="7.25" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="9.4" cy="10.6" r="0.95" fill="currentColor" />
+      <circle cx="14.6" cy="10.6" r="0.95" fill="currentColor" />
+      <path d="M8.9 14.1c.8 1.15 1.85 1.7 3.1 1.7s2.3-.55 3.1-1.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ItemIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path
+        d="M8.9 7.2 16.7 15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.15 8.15 6.3 5.7a1.65 1.65 0 0 1 2.34-2.34l2.46 1.85"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="m13.2 11.45 5.2 5.2a2.15 2.15 0 1 1-3.04 3.04l-5.2-5.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
@@ -1435,13 +1576,107 @@ function FriendsPanel({
   )
 }
 
+const CUSTOMIZE_CATEGORIES: CustomizeCategoryDef[] = [
+  {
+    id: 'pose',
+    label: 'Поза',
+    description: 'Выбирайте стойку и настроение персонажа для главной сцены.',
+    placement: 'top',
+    Icon: PoseIcon,
+  },
+  {
+    id: 'headwear',
+    label: 'Головные уборы',
+    description: 'Кепки, шляпы и другие акценты для верхней части образа.',
+    placement: 'topRight',
+    Icon: HeadwearIcon,
+  },
+  {
+    id: 'build',
+    label: 'Телосложение',
+    description: 'Позже здесь появятся варианты фигуры и силуэта человечка.',
+    placement: 'right',
+    Icon: BuildIcon,
+  },
+  {
+    id: 'item',
+    label: 'Предмет',
+    description: 'Аксессуары и предметы в руках персонажа для бизнес-сцены.',
+    placement: 'bottomRight',
+    Icon: ItemIcon,
+  },
+  {
+    id: 'face',
+    label: 'Лицо',
+    description: 'Настраивайте эмоции, взгляд и детали лица персонажа.',
+    placement: 'bottomLeft',
+    Icon: FaceIcon,
+  },
+  {
+    id: 'hair',
+    label: 'Прически',
+    description: 'Подберите стиль волос и общую подачу образа.',
+    placement: 'left',
+    Icon: HairIcon,
+  },
+]
+
 function CustomizePanel() {
+  const [activeCategoryId, setActiveCategoryId] = useState<CustomizeCategoryId>('pose')
+  const activeCategory = CUSTOMIZE_CATEGORIES.find((category) => category.id === activeCategoryId) ?? CUSTOMIZE_CATEGORIES[0]
+
   return (
     <section className="panel customizePanel">
       <div className="customizePanelHeader">
-        <h2>Кастомизация</h2>
+        <div>
+          <h2>Кастомизация</h2>
+          <p className="customizeHint">По центру ваш человечек, а вокруг быстрые разделы внешнего вида.</p>
+        </div>
       </div>
-      <p className="customizeHint">Темы квартиры теперь выбираются через предмет `Квартира` в инвентаре. Здесь позже появятся машины, документы и другие активы.</p>
+
+      <div className="customizeStudio">
+        <div className="customizeStudioGlow" aria-hidden="true" />
+        <div className="customizeOrbit">
+          {CUSTOMIZE_CATEGORIES.map((category) => {
+            const isActive = category.id === activeCategory.id
+            const Icon = category.Icon
+
+            return (
+              <button
+                key={category.id}
+                type="button"
+                className={`customizeAction customizeAction--${category.placement} ${isActive ? 'isActive' : ''}`}
+                onClick={() => setActiveCategoryId(category.id)}
+                aria-pressed={isActive}
+              >
+                <span className="customizeActionIcon">
+                  <Icon />
+                </span>
+                <span className="customizeActionLabel">{category.label}</span>
+              </button>
+            )
+          })}
+
+          <div className="customizeAvatarStage">
+            <div className="customizeAvatarHalo" aria-hidden="true" />
+            <div className="customizeAvatarCard">
+              <Stickman />
+            </div>
+            <div className="customizeAvatarMeta">
+              <span className="customizeAvatarEyebrow">Персонаж</span>
+              <span className="customizeAvatarName">Ваш человечек</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="customizeSelectionCard">
+        <div className="customizeSelectionEyebrow">Раздел</div>
+        <div className="customizeSelectionTitle">{activeCategory.label}</div>
+        <p className="customizeSelectionText">{activeCategory.description}</p>
+      </div>
+
+      <p className="customizeSubnote">Темы квартиры и другие активы остаются в инвентаре через предметы.</p>
     </section>
   )
 }
@@ -1522,13 +1757,11 @@ function SlotsModal({
   stars,
   onClose,
   onStarsChange,
-  onReloadInventory,
 }: {
   userId: string
   stars: string
   onClose: () => void
   onStarsChange: (nextStars: string) => void
-  onReloadInventory: () => Promise<void> | void
 }) {
   const [reelStates, setReelStates] = useState<ReelState[]>(() => [
     createIdleReelState(pickRandomSlotReward()),
@@ -1537,7 +1770,6 @@ function SlotsModal({
   ])
   const [isSpinning, setIsSpinning] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const [wonRewards, setWonRewards] = useState<SlotRewardDef[]>([])
   const timersRef = useRef<number[]>([])
   const animationFrameRef = useRef<number | null>(null)
 
@@ -1559,11 +1791,8 @@ function SlotsModal({
     }
   }, [clearSpinTimers])
 
-  const finalizeLocalSpin = useCallback((rewards: SlotRewardDef[], nextStars: string) => {
+  const finalizeLocalSpin = useCallback((nextStars: string) => {
     saveLocalStars(userId, nextStars)
-    for (const reward of rewards) {
-      upsertLocalCard(userId, reward.cardId, 1)
-    }
   }, [userId])
 
   const requestSpin = useCallback(async () => {
@@ -1603,14 +1832,13 @@ function SlotsModal({
       const nextStars = String(
         Math.max(0, currentStars - SLOT_SPIN_COST + (isJackpot ? SLOT_JACKPOT_STARS : 0))
       )
-      finalizeLocalSpin(rewards, nextStars)
+      finalizeLocalSpin(nextStars)
       return { rewards, nextStars }
     }
   }, [finalizeLocalSpin, stars, userId])
 
   const runSpinAnimation = useCallback((finalRewards: SlotRewardDef[]) => {
     clearSpinTimers()
-    setWonRewards([])
     setStatus(null)
     setIsSpinning(true)
 
@@ -1635,14 +1863,12 @@ function SlotsModal({
       setReelStates(animatedStates)
     })
 
-    const finishTimerId = window.setTimeout(async () => {
-      setWonRewards(finalRewards)
+    const finishTimerId = window.setTimeout(() => {
       setIsSpinning(false)
-      await onReloadInventory()
     }, Math.max(...animatedStates.map((state) => state.durationMs)) + 140)
 
     timersRef.current.push(finishTimerId)
-  }, [clearSpinTimers, onReloadInventory])
+  }, [clearSpinTimers])
 
   const handleSpin = useCallback(async () => {
     if (isSpinning) return
@@ -1736,16 +1962,6 @@ function SlotsModal({
 
         {status && <div className="slotsStatus">{status}</div>}
 
-        {wonRewards.length > 0 && (
-          <div className="slotsRewards">
-            {wonRewards.map((reward, index) => (
-              <div key={`${reward.cardId}-${index}`} className="slotsRewardChip">
-                <ChromaKeyImage className="slotsRewardChipImg" src={reward.imageSrc} alt="" />
-                <span>{reward.slotName}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
@@ -1756,11 +1972,15 @@ function BusinessPanel({
   stars,
   onStarsChange,
   onClose,
+  onBusinessChange,
+  variant = 'panel',
 }: {
   userId: string
   stars: string
   onStarsChange: (nextStars: string) => void
   onClose?: () => void
+  onBusinessChange?: (business: BusinessProfile | null) => void
+  variant?: 'panel' | 'page'
 }) {
   const [business, setBusiness] = useState<BusinessProfile | null>(null)
   const [team, setTeam] = useState<BusinessTeamState>(() => loadBusinessTeam(userId))
@@ -1787,6 +2007,7 @@ function BusinessPanel({
       setBusiness(nextBusiness)
       setBusinessName(nextBusiness?.name ?? '')
       setBusinessDescription(nextBusiness?.description ?? '')
+      onBusinessChange?.(nextBusiness)
       if (typeof data.stars === 'string') {
         onStarsChange(data.stars)
       }
@@ -1795,10 +2016,11 @@ function BusinessPanel({
       setBusiness(localBusiness)
       setBusinessName(localBusiness?.name ?? '')
       setBusinessDescription(localBusiness?.description ?? '')
+      onBusinessChange?.(localBusiness)
     } finally {
       setLoadingBusiness(false)
     }
-  }, [onStarsChange, userId])
+  }, [onBusinessChange, onStarsChange, userId])
 
   useEffect(() => {
     void loadBusiness()
@@ -1890,12 +2112,14 @@ function BusinessPanel({
         capital: String(BUSINESS_START_CAPITAL),
       }
       setBusiness(nextBusiness)
+      onBusinessChange?.(nextBusiness)
       setBusinessName(nextBusiness.name)
       setBusinessDescription(nextBusiness.description)
       saveLocalBusiness(userId, nextBusiness)
       if (typeof data?.stars === 'string') {
         onStarsChange(data.stars)
       }
+      onClose?.()
     } catch (error) {
       if (
         error instanceof Error &&
@@ -1919,15 +2143,17 @@ function BusinessPanel({
         capital: String(BUSINESS_START_CAPITAL),
       }
       setBusiness(nextBusiness)
+      onBusinessChange?.(nextBusiness)
       setBusinessName(nextBusiness.name)
       setBusinessDescription(nextBusiness.description)
       saveLocalBusiness(userId, nextBusiness)
       saveLocalStars(userId, nextStars)
       onStarsChange(nextStars)
+      onClose?.()
     } finally {
       setSavingBusiness(false)
     }
-  }, [businessDescription, businessName, onStarsChange, stars, userId])
+  }, [businessDescription, businessName, onBusinessChange, onClose, onStarsChange, stars, userId])
 
   const handleSaveBusiness = useCallback(async () => {
     if (!business) return
@@ -1955,6 +2181,7 @@ function BusinessPanel({
         description: normalizedDescription,
       }
       setBusiness(nextBusiness)
+      onBusinessChange?.(nextBusiness)
       saveLocalBusiness(userId, nextBusiness)
       if (typeof data?.stars === 'string') {
         onStarsChange(data.stars)
@@ -1966,14 +2193,15 @@ function BusinessPanel({
         description: normalizedDescription,
       }
       setBusiness(nextBusiness)
+      onBusinessChange?.(nextBusiness)
       saveLocalBusiness(userId, nextBusiness)
     } finally {
       setSavingBusiness(false)
     }
-  }, [business, businessDescription, businessName, onStarsChange, userId])
+  }, [business, businessDescription, businessName, onBusinessChange, onStarsChange, userId])
 
   return (
-    <section className="panel businessPanel">
+    <section className={variant === 'page' ? 'businessPanel businessPage' : 'panel businessPanel'}>
       <div className="businessPanelHeader">
         <h2>Бизнес</h2>
         {onClose && (
@@ -2140,6 +2368,8 @@ function BusinessPanel({
 }
 
 function App() {
+  const userId = useMemo(() => getUserId(), [])
+  const telegramIdentity = useMemo(() => getTelegramIdentity(userId), [userId])
   const [tab, setTab] = useState<TabKey>('home')
   const [isPackOpen, setIsPackOpen] = useState(false)
   const [isSlotsOpen, setIsSlotsOpen] = useState(false)
@@ -2150,8 +2380,7 @@ function App() {
   const [didRewardThisOpen, setDidRewardThisOpen] = useState(false)
   const [rewardCard, setRewardCard] = useState<CardDef | null>(null)
   const [stars, setStars] = useState('0')
-  const userId = useMemo(() => getUserId(), [])
-  const telegramIdentity = useMemo(() => getTelegramIdentity(userId), [userId])
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(() => loadLocalBusiness(userId))
   const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
   const hasApartment = useMemo(
     () => inventory.some((item) => item.cardId === APARTMENT_CARD_ID),
@@ -2253,6 +2482,29 @@ function App() {
     void loadProfile()
   }, [loadProfile])
 
+  const loadBusinessStatus = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/business?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) throw new Error('Не удалось загрузить бизнес')
+      const data = (await r.json()) as { business: BusinessProfile | null; stars?: string }
+      const nextBusiness = data.business ?? null
+      setBusinessProfile(nextBusiness)
+      if (nextBusiness) {
+        saveLocalBusiness(userId, nextBusiness)
+      }
+      if (typeof data.stars === 'string') {
+        setStars(data.stars)
+        saveLocalStars(userId, data.stars)
+      }
+    } catch {
+      setBusinessProfile(loadLocalBusiness(userId))
+    }
+  }, [userId])
+
+  useEffect(() => {
+    void loadBusinessStatus()
+  }, [loadBusinessStatus])
+
   useEffect(() => {
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
   }, [userId])
@@ -2301,6 +2553,8 @@ function App() {
         return 'Друзья'
       case 'customize':
         return 'Кастомизация'
+      case 'business':
+        return 'Бизнес'
     }
   }, [tab])
 
@@ -2362,14 +2616,16 @@ function App() {
             >
               <FriendsIcon />
             </button>
-            <button
-              type="button"
-              className="edgeGardenButton"
-              aria-label="Бизнес"
-              onClick={() => setIsGardenOpen(true)}
-            >
-              <GardenIcon />
-            </button>
+            {!businessProfile && (
+              <button
+                type="button"
+                className="edgeGardenButton"
+                aria-label="Бизнес"
+                onClick={() => setIsGardenOpen(true)}
+              >
+                <GardenIcon />
+              </button>
+            )}
             <button
               type="button"
               className="edgePackButton"
@@ -2412,6 +2668,21 @@ function App() {
 
         {tab === 'customize' && (
           <CustomizePanel />
+        )}
+
+        {tab === 'business' && businessProfile && (
+          <BusinessPanel
+            userId={userId}
+            stars={stars}
+            variant="page"
+            onStarsChange={(nextStars) => {
+              setStars(nextStars)
+              saveLocalStars(userId, nextStars)
+            }}
+            onBusinessChange={(nextBusiness) => {
+              setBusinessProfile(nextBusiness)
+            }}
+          />
         )}
       </main>
 
@@ -2474,7 +2745,6 @@ function App() {
             setStars(nextStars)
             saveLocalStars(userId, nextStars)
           }}
-          onReloadInventory={loadInventory}
         />
       )}
 
@@ -2502,13 +2772,19 @@ function App() {
                 setStars(nextStars)
                 saveLocalStars(userId, nextStars)
               }}
+              onBusinessChange={(nextBusiness) => {
+                setBusinessProfile(nextBusiness)
+                if (nextBusiness) {
+                  setTab('business')
+                }
+              }}
               onClose={() => setIsGardenOpen(false)}
             />
           </div>
         </div>
       )}
 
-      <nav className="tabbar" aria-label="Навигация">
+      <nav className={`tabbar ${businessProfile ? 'hasBusiness' : ''}`} aria-label="Навигация">
         <button
           type="button"
           className={tab === 'home' ? 'tab active' : 'tab'}
@@ -2527,6 +2803,17 @@ function App() {
           <InventoryIcon className="tabIcon" />
           <span>Инвентарь</span>
         </button>
+        {businessProfile && (
+          <button
+            type="button"
+            className={tab === 'business' ? 'tab active' : 'tab'}
+            aria-current={tab === 'business' ? 'page' : undefined}
+            onClick={() => setTab('business')}
+          >
+            <GardenIcon className="tabIcon" />
+            <span>Бизнес</span>
+          </button>
+        )}
         <button
           type="button"
           className={tab === 'customize' ? 'tab active' : 'tab'}

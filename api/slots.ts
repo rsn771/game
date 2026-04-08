@@ -85,15 +85,6 @@ export default async function handler(req: Request): Promise<Response> {
   const rewards = [pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()]
   const isJackpot = rewards.every((reward) => reward.cardId === rewards[0].cardId)
 
-  for (const reward of rewards) {
-    await sql`
-      insert into inventory (user_id, card_id, qty)
-      values (${userId}, ${reward.cardId}, 1)
-      on conflict (user_id, card_id)
-      do update set qty = inventory.qty + 1;
-    `
-  }
-
   let finalStars = nextStars
 
   if (isJackpot) {

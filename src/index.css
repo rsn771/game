@@ -659,6 +659,16 @@ body {
   gap: 14px;
 }
 
+.businessPage {
+  width: 100%;
+  max-width: 560px;
+  min-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 24px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 2px 6px;
+  align-self: flex-start;
+}
+
 .businessPanelHeader {
   display: flex;
   align-items: center;
@@ -1009,7 +1019,270 @@ body {
 .customizePanel {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.08), transparent 34%),
+    rgba(0, 0, 0, 0.96);
+}
+
+.customizePanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customizePanelHeader h2 {
+  margin: 0;
+}
+
+.customizeStudio {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at 50% 8%, rgba(255, 255, 255, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    #020202;
+  min-height: 520px;
+  padding: 22px 16px 18px;
+}
+
+.customizeStudioGlow {
+  position: absolute;
+  inset: auto 50% -120px;
+  width: 320px;
+  height: 320px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 70%);
+  filter: blur(24px);
+  pointer-events: none;
+}
+
+.customizeOrbit {
+  position: relative;
+  width: min(100%, 468px);
+  min-height: 480px;
+  margin: 0 auto;
+}
+
+.customizeAvatarStage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: grid;
+  justify-items: center;
   gap: 14px;
+}
+
+.customizeAvatarHalo {
+  position: absolute;
+  inset: 20px auto auto 50%;
+  width: 220px;
+  height: 220px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04) 46%, transparent 72%);
+  filter: blur(8px);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.customizeAvatarCard {
+  position: relative;
+  width: min(52vw, 248px);
+  min-width: 176px;
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  padding: 16px 12px 10px;
+  border-radius: 999px 999px 28px 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01)),
+    rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 30px 60px rgba(0, 0, 0, 0.42);
+}
+
+.customizeAvatarCard .stickman {
+  width: min(48vw, 210px);
+}
+
+.customizeAvatarMeta {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.customizeAvatarEyebrow {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.customizeAvatarName {
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.customizeAction {
+  position: absolute;
+  z-index: 3;
+  width: 96px;
+  min-height: 88px;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+    rgba(0, 0, 0, 0.62);
+  color: var(--fg);
+  padding: 10px 8px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.customizeAction:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
+    rgba(0, 0, 0, 0.72);
+}
+
+.customizeAction.isActive {
+  border-color: rgba(255, 255, 255, 0.4);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.07)),
+    rgba(0, 0, 0, 0.78);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 14px 28px rgba(0, 0, 0, 0.24);
+}
+
+.customizeAction:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 3px;
+}
+
+.customizeActionIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.customizeActionIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.customizeActionLabel {
+  font-size: 10.5px;
+  line-height: 1.15;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.customizeAction--top {
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.customizeAction--topRight {
+  top: 58px;
+  right: 6px;
+}
+
+.customizeAction--right {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.customizeAction--bottomRight {
+  right: 12px;
+  bottom: 40px;
+}
+
+.customizeAction--bottomLeft {
+  left: 12px;
+  bottom: 40px;
+}
+
+.customizeAction--left {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.customizeAction--top:hover,
+.customizeAction--top.isActive {
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.customizeAction--right:hover,
+.customizeAction--right.isActive,
+.customizeAction--left:hover,
+.customizeAction--left.isActive {
+  transform: translateY(-50%) translateY(-2px);
+}
+
+.customizeSelectionCard {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.customizeSelectionEyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.customizeSelectionTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.customizeSelectionText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.customizeSubnote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .apartmentThemeOverlay {
@@ -1051,10 +1324,6 @@ body {
   font-size: 13px;
   color: var(--muted);
   line-height: 1.5;
-}
-
-.customizePanelHeader h2 {
-  margin: 0;
 }
 
 .customizeHint {
@@ -1507,6 +1776,10 @@ body {
   background: rgba(0, 0, 0, 0.9);
   backdrop-filter: blur(10px);
   z-index: 40;
+}
+
+.tabbar.hasBusiness {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .tab {
@@ -2229,6 +2502,66 @@ body.inventoryDragActive {
 
   .customizeGrid {
     grid-template-columns: 1fr;
+  }
+
+  .customizeStudio {
+    min-height: 470px;
+    padding: 18px 10px 16px;
+  }
+
+  .customizeOrbit {
+    min-height: 436px;
+  }
+
+  .customizeAvatarCard {
+    width: min(50vw, 208px);
+    min-width: 154px;
+    min-height: 278px;
+  }
+
+  .customizeAvatarCard .stickman {
+    width: min(44vw, 176px);
+  }
+
+  .customizeAction {
+    width: 84px;
+    min-height: 78px;
+    border-radius: 18px;
+    padding: 8px 6px;
+  }
+
+  .customizeActionIcon {
+    width: 30px;
+    height: 30px;
+    border-radius: 12px;
+  }
+
+  .customizeActionIcon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .customizeActionLabel {
+    font-size: 9.5px;
+  }
+
+  .customizeAction--top {
+    top: 2px;
+  }
+
+  .customizeAction--topRight {
+    top: 50px;
+    right: 0;
+  }
+
+  .customizeAction--bottomRight {
+    right: 4px;
+    bottom: 34px;
+  }
+
+  .customizeAction--bottomLeft {
+    left: 4px;
+    bottom: 34px;
   }
 
   .businessGrid {
