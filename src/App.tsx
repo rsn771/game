@@ -2183,10 +2183,13 @@ function ClickerModal({
 }) {
   const [status, setStatus] = useState<string | null>(null)
   const [tapBurst, setTapBurst] = useState(0)
+  const [tapFloats, setTapFloats] = useState<{ id: number; drift: number }[]>([])
   const latestStarsRef = useRef(stars)
   const queuedDeltaRef = useRef(0)
   const syncingRef = useRef(false)
   const resetBurstTimerRef = useRef<number | null>(null)
+  const floatTimersRef = useRef<number[]>([])
+  const floatIdRef = useRef(0)
   const emitStarsChange = useEffectEvent((nextStars: string) => {
     onStarsChange(nextStars)
   })
@@ -2231,6 +2234,10 @@ function ClickerModal({
       if (resetBurstTimerRef.current !== null) {
         window.clearTimeout(resetBurstTimerRef.current)
       }
+      for (const timerId of floatTimersRef.current) {
+        window.clearTimeout(timerId)
+      }
+      floatTimersRef.current = []
     }
   }, [])
 
@@ -2242,6 +2249,14 @@ function ClickerModal({
     queuedDeltaRef.current += 1
     setTapBurst((value) => value + 1)
     setStatus('+1 звезда')
+    const nextFloatId = floatIdRef.current + 1
+    floatIdRef.current = nextFloatId
+    setTapFloats((current) => [...current, { id: nextFloatId, drift: Math.round((Math.random() - 0.5) * 28) }])
+    const floatTimerId = window.setTimeout(() => {
+      setTapFloats((current) => current.filter((entry) => entry.id !== nextFloatId))
+      floatTimersRef.current = floatTimersRef.current.filter((timerId) => timerId !== floatTimerId)
+    }, 920)
+    floatTimersRef.current.push(floatTimerId)
 
     if (resetBurstTimerRef.current !== null) {
       window.clearTimeout(resetBurstTimerRef.current)
@@ -2278,13 +2293,22 @@ function ClickerModal({
         </div>
 
         <div className="clickerStage">
+          {tapFloats.map((float) => (
+            <span
+              key={float.id}
+              className="clickerTapFloat"
+              style={{ ['--clicker-float-drift' as any]: `${float.drift}px` }}
+            >
+              +1
+            </span>
+          ))}
           <button
             type="button"
             className={`clickerCoinButton ${tapBurst > 0 ? 'isBursting' : ''}`}
             onClick={handleTap}
             aria-label="Получить звезду"
           >
-            <CoinIcon className="clickerCoinIcon" />
+            <StarsIcon className="clickerCoinIcon" />
             <span className="clickerCoinSpark" aria-hidden="true" />
           </button>
         </div>
