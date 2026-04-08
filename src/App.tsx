@@ -273,6 +273,10 @@ function isAnonymousUserId(userId: string): boolean {
   return userId.startsWith('anon_')
 }
 
+function areTelegramIdentitiesEqual(a: TelegramIdentity, b: TelegramIdentity): boolean {
+  return a.userId === b.userId && a.username === b.username && a.displayName === b.displayName
+}
+
 function getTelegramIdentity(userId: string): TelegramIdentity {
   const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user
   const username =
@@ -2882,7 +2886,7 @@ function BusinessPanel({
 function App() {
   const [userId, setUserId] = useState(() => getUserId())
   const pendingMigrationUserIdRef = useRef<string | null>(null)
-  const telegramIdentity = useMemo(() => getTelegramIdentity(userId), [userId])
+  const [telegramIdentity, setTelegramIdentity] = useState<TelegramIdentity>(() => getTelegramIdentity(getUserId()))
   const [tab, setTab] = useState<TabKey>('home')
   const [isPackOpen, setIsPackOpen] = useState(false)
   const [isSlotsOpen, setIsSlotsOpen] = useState(false)
@@ -2923,6 +2927,30 @@ function App() {
     const intervalId = window.setInterval(() => {
       attempts += 1
       if (syncTelegramUser() || attempts >= 24) {
+        window.clearInterval(intervalId)
+      }
+    }, 350)
+
+    return () => window.clearInterval(intervalId)
+  }, [userId])
+
+  useEffect(() => {
+    const syncTelegramIdentity = () => {
+      const nextIdentity = getTelegramIdentity(userId)
+      setTelegramIdentity((currentIdentity) => (
+        areTelegramIdentitiesEqual(currentIdentity, nextIdentity) ? currentIdentity : nextIdentity
+      ))
+      return nextIdentity
+    }
+
+    const firstIdentity = syncTelegramIdentity()
+    if (firstIdentity.username || firstIdentity.displayName) return
+
+    let attempts = 0
+    const intervalId = window.setInterval(() => {
+      attempts += 1
+      const nextIdentity = syncTelegramIdentity()
+      if (nextIdentity.username || nextIdentity.displayName || attempts >= 24) {
         window.clearInterval(intervalId)
       }
     }, 350)
