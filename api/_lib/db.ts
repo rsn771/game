@@ -27,6 +27,17 @@ function normalizeOptionalText(value?: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function isConcurrentCreateRaceError(error: unknown, relationName: string): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: string; constraint?: string; detail?: string }
+  return (
+    candidate.code === '23505'
+    && candidate.constraint === 'pg_type_typname_nsp_index'
+    && typeof candidate.detail === 'string'
+    && candidate.detail.includes(`(${relationName},`)
+  )
+}
+
 async function seedCards(query: SqlRunner) {
   await query`
     insert into cards (id, name, image_src)
@@ -222,18 +233,24 @@ async function ensureSchemaOnce() {
     );
   `
 
-  await query`
-    create table if not exists business_staff (
-      owner_user_id text not null references businesses(owner_user_id) on delete cascade,
-      slot_index integer not null,
-      employee_user_id text unique references users(tg_user_id) on delete set null,
-      role_name text not null default '',
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now(),
-      primary key (owner_user_id, slot_index),
-      check (slot_index >= 0 and slot_index < 6)
-    );
-  `
+  try {
+    await query`
+      create table if not exists business_staff (
+        owner_user_id text not null references businesses(owner_user_id) on delete cascade,
+        slot_index integer not null,
+        employee_user_id text unique references users(tg_user_id) on delete set null,
+        role_name text not null default '',
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (owner_user_id, slot_index),
+        check (slot_index >= 0 and slot_index < 6)
+      );
+    `
+  } catch (error) {
+    if (!isConcurrentCreateRaceError(error, 'business_staff')) {
+      throw error
+    }
+  }
 
   await query`
     create table if not exists app_meta (

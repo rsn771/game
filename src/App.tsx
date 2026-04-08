@@ -2978,11 +2978,6 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isPackOpen])
 
-  useEffect(() => {
-    // ensure DB schema + seed exists (safe to call multiple times)
-    fetch('/api/setup', { method: 'POST' }).catch(() => {})
-  }, [])
-
   const loadProfile = useCallback(async () => {
     const fallbackStars = getFallbackStars(userId)
     setStars(fallbackStars)
