@@ -7,6 +7,7 @@ const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
 const STARTER_INVENTORY_CARD_ID = 'asset_apartment'
 const INVENTORY_RESET_VERSION = 1
 const SCHEMA_LOCK_KEY = 41_523_301
+const BUSINESS_SLOT_COUNT = 6
 
 type SqlRunner = typeof sql
 let schemaReadyPromise: Promise<void> | null = null
@@ -223,6 +224,19 @@ async function ensureSchemaOnce() {
     `
 
     await query`
+      create table if not exists business_staff (
+        owner_user_id text not null references businesses(owner_user_id) on delete cascade,
+        slot_index integer not null,
+        employee_user_id text unique references users(tg_user_id) on delete set null,
+        role_name text not null default '',
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (owner_user_id, slot_index),
+        check (slot_index >= 0 and slot_index < ${BUSINESS_SLOT_COUNT})
+      );
+    `
+
+    await query`
       create table if not exists app_meta (
         key text primary key,
         value text not null
@@ -247,6 +261,16 @@ async function ensureSchemaOnce() {
     await query`
       create index if not exists friend_requests_from_status_idx
       on friend_requests (from_user_id, status, updated_at desc);
+    `
+
+    await query`
+      create index if not exists business_staff_owner_idx
+      on business_staff (owner_user_id, slot_index);
+    `
+
+    await query`
+      create index if not exists business_staff_employee_idx
+      on business_staff (employee_user_id);
     `
 
     await seedCards(query)

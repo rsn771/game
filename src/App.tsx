@@ -75,6 +75,36 @@ type BusinessProfile = {
   capital: string
 }
 
+type BusinessMode = 'none' | 'owner' | 'employee'
+
+type BusinessOwnerPreview = {
+  userId: string
+  username: string | null
+  displayName: string | null
+}
+
+type BusinessStaffSlot = {
+  slotIndex: number
+  roleName: string
+  userId: string | null
+  username: string | null
+  displayName: string | null
+}
+
+type BusinessAssignment = {
+  slotIndex: number
+  roleName: string
+}
+
+type BusinessPayload = {
+  mode: BusinessMode
+  business: BusinessProfile | null
+  stars?: string
+  owner: BusinessOwnerPreview | null
+  staff: BusinessStaffSlot[]
+  assignment: BusinessAssignment | null
+}
+
 type CustomizeCategoryId = 'pose' | 'headwear' | 'build' | 'hair' | 'face' | 'item'
 
 type CustomizeCategoryDef = {
@@ -103,6 +133,14 @@ const SLOT_JACKPOT_STARS = 10_000
 const BUSINESS_SLOT_COUNT = 6
 const SLOT_REEL_TURNS = 14
 const LOCAL_INVENTORY_RESET_VERSION = 1
+const DEFAULT_BUSINESS_ROLES = [
+  'Управляющий',
+  'Консультант',
+  'Кассир',
+  'Маркетолог',
+  'Логист',
+  'Ассистент',
+] as const
 
 const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
   {
@@ -249,15 +287,15 @@ function getTelegramIdentity(userId: string): TelegramIdentity {
   }
 }
 
-function getUserPrimaryLabel(user: { userId: string; username: string | null; displayName: string | null }) {
+function getUserPrimaryLabel(user: { userId: string | null; username: string | null; displayName: string | null }) {
   if (user.username) return `@${user.username}`
   if (user.displayName) return user.displayName
-  return `ID ${user.userId}`
+  return user.userId ? `ID ${user.userId}` : 'Не назначен'
 }
 
-function getUserSecondaryLabel(user: { userId: string; username: string | null; displayName: string | null }) {
+function getUserSecondaryLabel(user: { userId: string | null; username: string | null; displayName: string | null }) {
   if (user.username && user.displayName) return user.displayName
-  return `ID ${user.userId}`
+  return user.userId ? `ID ${user.userId}` : 'Свободный слот'
 }
 
 type LocalInventory = Record<string, number>
@@ -392,6 +430,91 @@ function saveLocalBusiness(userId: string, business: BusinessProfile) {
 
 type BusinessTeamState = (HiredEmployee | null)[]
 
+function getDefaultBusinessRole(slotIndex: number): string {
+  return DEFAULT_BUSINESS_ROLES[slotIndex] ?? `Сотрудник ${slotIndex + 1}`
+}
+
+function createEmptyBusinessStaff(): BusinessStaffSlot[] {
+  return Array.from({ length: BUSINESS_SLOT_COUNT }, (_, slotIndex) => ({
+    slotIndex,
+    roleName: getDefaultBusinessRole(slotIndex),
+    userId: null,
+    username: null,
+    displayName: null,
+  }))
+}
+
+function normalizeBusinessStaff(staff: unknown): BusinessStaffSlot[] {
+  if (!Array.isArray(staff)) return createEmptyBusinessStaff()
+
+  const byIndex = new Map<number, BusinessStaffSlot>()
+  for (const entry of staff) {
+    if (!entry || typeof entry !== 'object') continue
+    const slot = entry as Partial<BusinessStaffSlot>
+    const slotIndex = Number(slot.slotIndex)
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= BUSINESS_SLOT_COUNT) continue
+    byIndex.set(slotIndex, {
+      slotIndex,
+      roleName: typeof slot.roleName === 'string' && slot.roleName.trim().length > 0
+        ? slot.roleName.trim()
+        : getDefaultBusinessRole(slotIndex),
+      userId: typeof slot.userId === 'string' && slot.userId.trim().length > 0 ? slot.userId : null,
+      username: typeof slot.username === 'string' && slot.username.trim().length > 0 ? slot.username : null,
+      displayName: typeof slot.displayName === 'string' && slot.displayName.trim().length > 0 ? slot.displayName : null,
+    })
+  }
+
+  return createEmptyBusinessStaff().map((slot) => byIndex.get(slot.slotIndex) ?? slot)
+}
+
+function loadLocalBusinessStaff(userId: string): BusinessStaffSlot[] {
+  try {
+    const raw = localStorage.getItem(`business_staff_${userId}`)
+    if (raw) {
+      return normalizeBusinessStaff(JSON.parse(raw) as unknown)
+    }
+  } catch {
+    // ignore
+  }
+
+  const legacyTeam = loadBusinessTeam(userId)
+  return createEmptyBusinessStaff().map((slot, index) => {
+    const legacy = legacyTeam[index]
+    if (!legacy) return slot
+    return {
+      ...slot,
+      userId: legacy.userId,
+      username: legacy.username,
+      displayName: legacy.displayName,
+    }
+  })
+}
+
+function saveLocalBusinessStaff(userId: string, staff: BusinessStaffSlot[]) {
+  try {
+    localStorage.setItem(`business_staff_${userId}`, JSON.stringify(staff))
+  } catch {
+    // ignore
+  }
+}
+
+function createLocalBusinessPayload(userId: string, business: BusinessProfile | null): BusinessPayload {
+  return {
+    mode: business ? 'owner' : 'none',
+    business,
+    stars: getFallbackStars(userId),
+    owner: business
+      ? {
+          userId,
+          username: null,
+          displayName: null,
+        }
+      : null,
+    staff: business ? loadLocalBusinessStaff(userId) : createEmptyBusinessStaff(),
+    assignment: null,
+  }
+}
+
 function loadBusinessTeam(userId: string): BusinessTeamState {
   try {
     const raw = localStorage.getItem(`business_team_${userId}`)
@@ -412,14 +535,6 @@ function loadBusinessTeam(userId: string): BusinessTeamState {
     })
   } catch {
     return Array.from({ length: BUSINESS_SLOT_COUNT }, () => null)
-  }
-}
-
-function saveBusinessTeam(userId: string, team: BusinessTeamState) {
-  try {
-    localStorage.setItem(`business_team_${userId}`, JSON.stringify(team))
-  } catch {
-    // ignore
   }
 }
 
@@ -457,20 +572,26 @@ async function restoreBusinessFromLocal(userId: string, business: BusinessProfil
       }),
     })
 
-    const data = (await r.json().catch(() => null)) as
-      | { business?: BusinessProfile | null; stars?: string }
-      | null
+    const data = (await r.json().catch(() => null)) as BusinessPayload | null
 
     if (!r.ok) return null
 
     return {
+      mode: data?.mode ?? 'owner',
       business: data?.business ?? {
         name: business.name,
         description: business.description,
         capital: String(BUSINESS_START_CAPITAL),
       },
-      stars: typeof data?.stars === 'string' ? data.stars : null,
-    }
+      stars: typeof data?.stars === 'string' ? data.stars : undefined,
+      owner: data?.owner ?? {
+        userId,
+        username: null,
+        displayName: null,
+      },
+      staff: normalizeBusinessStaff(data?.staff),
+      assignment: data?.assignment ?? null,
+    } satisfies BusinessPayload
   } catch {
     return null
   }
@@ -696,6 +817,20 @@ function StarsIcon({ className }: { className?: string }) {
         fill="currentColor"
         d="M32 6 L38 26 L58 32 L38 38 L32 58 L26 38 L6 32 L26 26 Z"
       />
+    </svg>
+  )
+}
+
+function CoinIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="32" cy="32" r="22" />
+        <circle cx="32" cy="32" r="15" opacity="0.7" />
+        <path d="M26 32h12" />
+        <path d="M32 26v12" />
+        <path d="M22 18c3-2.8 6.8-4 10-4" opacity="0.52" />
+      </g>
     </svg>
   )
 }
@@ -2013,6 +2148,131 @@ function SlotsModal({
   )
 }
 
+function ClickerModal({
+  userId,
+  stars,
+  onClose,
+  onStarsChange,
+}: {
+  userId: string
+  stars: string
+  onClose: () => void
+  onStarsChange: (nextStars: string) => void
+}) {
+  const [status, setStatus] = useState<string | null>(null)
+  const [tapBurst, setTapBurst] = useState(0)
+  const latestStarsRef = useRef(stars)
+  const queuedDeltaRef = useRef(0)
+  const syncingRef = useRef(false)
+  const resetBurstTimerRef = useRef<number | null>(null)
+  const emitStarsChange = useEffectEvent((nextStars: string) => {
+    onStarsChange(nextStars)
+  })
+  const flushQueuedStars = useEffectEvent(async () => {
+    if (syncingRef.current || queuedDeltaRef.current === 0) return
+    syncingRef.current = true
+
+    const delta = queuedDeltaRef.current
+    queuedDeltaRef.current = 0
+
+    try {
+      const r = await fetchWithTimeout('/api/stars', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId, delta }),
+      })
+      const data = (await r.json().catch(() => null)) as { error?: string; stars?: string } | null
+      if (r.ok && typeof data?.stars === 'string') {
+        latestStarsRef.current = data.stars
+        saveLocalStars(userId, data.stars)
+        emitStarsChange(data.stars)
+        setStatus(null)
+      } else if (data?.error) {
+        setStatus(data.error)
+      }
+    } catch {
+      setStatus('Звёзды засчитаны локально. Синхронизируем с сервером позже.')
+    } finally {
+      syncingRef.current = false
+      if (queuedDeltaRef.current > 0) {
+        void flushQueuedStars()
+      }
+    }
+  })
+
+  useEffect(() => {
+    latestStarsRef.current = stars
+  }, [stars])
+
+  useEffect(() => {
+    return () => {
+      if (resetBurstTimerRef.current !== null) {
+        window.clearTimeout(resetBurstTimerRef.current)
+      }
+    }
+  }, [])
+
+  const handleTap = useCallback(() => {
+    const nextStars = String(Math.max(0, Number(latestStarsRef.current) + 1))
+    latestStarsRef.current = nextStars
+    saveLocalStars(userId, nextStars)
+    emitStarsChange(nextStars)
+    queuedDeltaRef.current += 1
+    setTapBurst((value) => value + 1)
+    setStatus('+1 звезда')
+
+    if (resetBurstTimerRef.current !== null) {
+      window.clearTimeout(resetBurstTimerRef.current)
+    }
+    resetBurstTimerRef.current = window.setTimeout(() => {
+      setTapBurst(0)
+    }, 180)
+
+    void flushQueuedStars()
+  }, [emitStarsChange, flushQueuedStars, userId])
+
+  return (
+    <div className="clickerOverlay" role="presentation" onClick={onClose}>
+      <div
+        className="clickerModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Кликер звёзд"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="clickerHeader">
+          <div>
+            <h3>Звёздный кликер</h3>
+            <p className="clickerSubtext">Каждое нажатие даёт +1 звезду на баланс.</p>
+          </div>
+          <button type="button" className="slotsClose" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+        </div>
+
+        <div className="clickerBalance">
+          <StarsIcon className="clickerBalanceIcon" />
+          <span>{formatStars(stars)}</span>
+        </div>
+
+        <div className="clickerStage">
+          <button
+            type="button"
+            className={`clickerCoinButton ${tapBurst > 0 ? 'isBursting' : ''}`}
+            onClick={handleTap}
+            aria-label="Получить звезду"
+          >
+            <CoinIcon className="clickerCoinIcon" />
+            <span className="clickerCoinSpark" aria-hidden="true" />
+          </button>
+        </div>
+
+        {status && <div className="clickerStatus">{status}</div>}
+      </div>
+    </div>
+  )
+}
+
 function BusinessPanel({
   userId,
   stars,
@@ -2028,9 +2288,13 @@ function BusinessPanel({
   onBusinessChange?: (business: BusinessProfile | null) => void
   variant?: 'panel' | 'page'
 }) {
+  const [mode, setMode] = useState<BusinessMode>('none')
   const [business, setBusiness] = useState<BusinessProfile | null>(null)
-  const [team, setTeam] = useState<BusinessTeamState>(() => loadBusinessTeam(userId))
+  const [owner, setOwner] = useState<BusinessOwnerPreview | null>(null)
+  const [assignment, setAssignment] = useState<BusinessAssignment | null>(null)
+  const [staff, setStaff] = useState<BusinessStaffSlot[]>(() => loadLocalBusinessStaff(userId))
   const [pickerForSlot, setPickerForSlot] = useState<number | null>(null)
+  const [roleDraft, setRoleDraft] = useState('')
   const [friends, setFriends] = useState<UserPreview[]>([])
   const [loadingFriends, setLoadingFriends] = useState(false)
   const [loadingBusiness, setLoadingBusiness] = useState(false)
@@ -2047,10 +2311,32 @@ function BusinessPanel({
   const emitClose = useEffectEvent(() => {
     onClose?.()
   })
+  const applyBusinessPayload = useEffectEvent((payload: BusinessPayload) => {
+    const nextBusiness = payload.business ?? null
+    const nextMode = payload.mode ?? (nextBusiness ? 'owner' : 'none')
+    const nextStaff = normalizeBusinessStaff(payload.staff)
 
-  useEffect(() => {
-    setTeam(loadBusinessTeam(userId))
-  }, [userId])
+    setMode(nextMode)
+    setBusiness(nextBusiness)
+    setOwner(payload.owner ?? null)
+    setAssignment(payload.assignment ?? null)
+    setStaff(nextStaff)
+    setBusinessName(nextBusiness?.name ?? '')
+    setBusinessDescription(nextBusiness?.description ?? '')
+    emitBusinessChange(nextBusiness)
+
+    if (nextMode === 'owner' && nextBusiness) {
+      saveLocalBusiness(userId, nextBusiness)
+      saveLocalBusinessStaff(userId, nextStaff)
+    }
+
+    if (typeof payload.stars === 'string') {
+      emitStarsChange(payload.stars)
+    }
+  })
+
+  const isOwner = mode === 'owner'
+  const isEmployee = mode === 'employee'
 
   const loadBusiness = useCallback(async () => {
     setLoadingBusiness(true)
@@ -2058,31 +2344,18 @@ function BusinessPanel({
     try {
       const r = await fetchWithTimeout(`/api/business?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить бизнес')
-      const data = (await r.json()) as { business: BusinessProfile | null; stars?: string }
-      let nextBusiness = data.business ?? null
-      let nextStars = typeof data.stars === 'string' ? data.stars : null
-
-      if (!nextBusiness && localBusiness) {
+      const data = (await r.json()) as BusinessPayload
+      if (!data.business && localBusiness) {
         const restored = await restoreBusinessFromLocal(userId, localBusiness)
-        nextBusiness = restored?.business ?? localBusiness
-        nextStars = restored?.stars ?? nextStars
-      }
-
-      setBusiness(nextBusiness)
-      setBusinessName(nextBusiness?.name ?? '')
-      setBusinessDescription(nextBusiness?.description ?? '')
-      emitBusinessChange(nextBusiness)
-      if (nextBusiness) {
-        saveLocalBusiness(userId, nextBusiness)
-      }
-      if (typeof nextStars === 'string') {
-        emitStarsChange(nextStars)
+        applyBusinessPayload(restored ?? createLocalBusinessPayload(userId, localBusiness))
+      } else {
+        applyBusinessPayload({
+          ...data,
+          staff: normalizeBusinessStaff(data.staff),
+        })
       }
     } catch {
-      setBusiness(localBusiness)
-      setBusinessName(localBusiness?.name ?? '')
-      setBusinessDescription(localBusiness?.description ?? '')
-      emitBusinessChange(localBusiness)
+      applyBusinessPayload(createLocalBusinessPayload(userId, localBusiness))
     } finally {
       setLoadingBusiness(false)
     }
@@ -2093,7 +2366,7 @@ function BusinessPanel({
   }, [loadBusiness])
 
   const loadFriends = useCallback(async () => {
-    if (!business) {
+    if (!business || !isOwner) {
       setFriends([])
       return
     }
@@ -2110,43 +2383,122 @@ function BusinessPanel({
     } finally {
       setLoadingFriends(false)
     }
-  }, [business, userId])
+  }, [business, isOwner, userId])
 
   useEffect(() => {
-    if (!business) return
+    if (!business || !isOwner) return
     void loadFriends()
-  }, [business, loadFriends])
+  }, [business, isOwner, loadFriends])
 
   const assignedIds = useMemo(
-    () => new Set(team.filter((employee): employee is HiredEmployee => employee !== null).map((employee) => employee.userId)),
-    [team]
+    () => new Set(staff.map((slot) => slot.userId).filter((value): value is string => Boolean(value))),
+    [staff],
   )
 
   const availableFriends = useMemo(() => {
     if (pickerForSlot === null) return []
-    const currentUserId = team[pickerForSlot]?.userId
+    const currentUserId = staff[pickerForSlot]?.userId
     return friends.filter((friend) => friend.userId === currentUserId || !assignedIds.has(friend.userId))
-  }, [assignedIds, friends, pickerForSlot, team])
+  }, [assignedIds, friends, pickerForSlot, staff])
+
+  const openStaffPicker = useCallback((slotIndex: number) => {
+    if (!isOwner) return
+    setPickerForSlot(slotIndex)
+    setRoleDraft(staff[slotIndex]?.roleName ?? getDefaultBusinessRole(slotIndex))
+  }, [isOwner, staff])
+
+  const syncStaffSlot = useCallback(async (
+    slotIndex: number,
+    nextEmployee: { userId: string | null; username: string | null; displayName: string | null },
+  ) => {
+    if (!business || !isOwner) return
+
+    const normalizedRole = roleDraft.trim() || getDefaultBusinessRole(slotIndex)
+    setSavingBusiness(true)
+    setNotice(null)
+
+    try {
+      const r = await fetchWithTimeout('/api/business', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'staff',
+          userId,
+          slotIndex,
+          employeeUserId: nextEmployee.userId,
+          roleName: normalizedRole,
+        }),
+      })
+      const data = (await r.json().catch(() => null)) as (BusinessPayload & { error?: string }) | null
+      if (!r.ok) {
+        if (data?.error) throw new Error(data.error)
+        throw new Error('__BUSINESS_STAFF_LOCAL__')
+      }
+
+      const payload = data
+        ? {
+            ...data,
+            staff: normalizeBusinessStaff(data.staff),
+          }
+        : createLocalBusinessPayload(userId, business)
+      applyBusinessPayload(payload)
+      setPickerForSlot(null)
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message !== '__BUSINESS_STAFF_LOCAL__' &&
+        !/Failed to fetch|NetworkError|fetch|abort/i.test(error.message)
+      ) {
+        setNotice(error.message)
+        setSavingBusiness(false)
+        return
+      }
+
+      const nextStaff = staff.map((slot) => (
+        slot.slotIndex === slotIndex
+          ? {
+              ...slot,
+              roleName: normalizedRole,
+              userId: nextEmployee.userId,
+              username: nextEmployee.username,
+              displayName: nextEmployee.displayName,
+            }
+          : slot
+      ))
+
+      setStaff(nextStaff)
+      saveLocalBusinessStaff(userId, nextStaff)
+      setPickerForSlot(null)
+    } finally {
+      setSavingBusiness(false)
+    }
+  }, [applyBusinessPayload, business, isOwner, roleDraft, staff, userId])
 
   const handleAssign = useCallback((slotIndex: number, friend: UserPreview) => {
-    const next = [...team]
-    next[slotIndex] = {
+    void syncStaffSlot(slotIndex, {
       userId: friend.userId,
       username: friend.username,
       displayName: friend.displayName,
-    }
-    setTeam(next)
-    saveBusinessTeam(userId, next)
-    setPickerForSlot(null)
-  }, [team, userId])
+    })
+  }, [syncStaffSlot])
 
   const handleClear = useCallback((slotIndex: number) => {
-    const next = [...team]
-    next[slotIndex] = null
-    setTeam(next)
-    saveBusinessTeam(userId, next)
-    setPickerForSlot(null)
-  }, [team, userId])
+    void syncStaffSlot(slotIndex, {
+      userId: null,
+      username: null,
+      displayName: null,
+    })
+  }, [syncStaffSlot])
+
+  const handleSaveRole = useCallback((slotIndex: number) => {
+    const slot = staff[slotIndex]
+    if (!slot) return
+    void syncStaffSlot(slotIndex, {
+      userId: slot.userId,
+      username: slot.username,
+      displayName: slot.displayName,
+    })
+  }, [staff, syncStaffSlot])
 
   const handleOpenBusiness = useCallback(async () => {
     const normalizedName = businessName.trim() || 'Мой бизнес'
@@ -2163,28 +2515,28 @@ function BusinessPanel({
           description: normalizedDescription,
         }),
       })
-      const data = await r.json().catch(() => null) as
-        | { error?: string; stars?: string; business?: BusinessProfile | null }
-        | null
+      const data = await r.json().catch(() => null) as (BusinessPayload & { error?: string }) | null
       if (!r.ok) {
         if (r.status === 400 && data?.error) {
           throw new Error(data.error)
         }
         throw new Error('__BUSINESS_LOCAL_FALLBACK__')
       }
-      const nextBusiness = data?.business ?? {
-        name: normalizedName,
-        description: normalizedDescription,
-        capital: String(BUSINESS_START_CAPITAL),
-      }
-      setBusiness(nextBusiness)
-      emitBusinessChange(nextBusiness)
-      setBusinessName(nextBusiness.name)
-      setBusinessDescription(nextBusiness.description)
-      saveLocalBusiness(userId, nextBusiness)
-      if (typeof data?.stars === 'string') {
-        emitStarsChange(data.stars)
-      }
+
+      const payload = data
+        ? {
+            ...data,
+            staff: normalizeBusinessStaff(data.staff),
+          }
+        : {
+            ...createLocalBusinessPayload(userId, {
+              name: normalizedName,
+              description: normalizedDescription,
+              capital: String(BUSINESS_START_CAPITAL),
+            }),
+            stars,
+          }
+      applyBusinessPayload(payload)
       emitClose()
     } catch (error) {
       if (
@@ -2196,33 +2548,45 @@ function BusinessPanel({
         setSavingBusiness(false)
         return
       }
+
       const currentStars = Number(stars)
       if (!Number.isFinite(currentStars) || currentStars < BUSINESS_OPEN_COST) {
         setNotice('Недостаточно звёзд для открытия бизнеса')
         setSavingBusiness(false)
         return
       }
+
       const nextStars = String(Math.max(0, currentStars - BUSINESS_OPEN_COST))
       const nextBusiness = {
         name: normalizedName,
         description: normalizedDescription,
         capital: String(BUSINESS_START_CAPITAL),
       }
+
+      setMode('owner')
       setBusiness(nextBusiness)
+      setOwner({
+        userId,
+        username: null,
+        displayName: null,
+      })
+      setAssignment(null)
+      setStaff(createEmptyBusinessStaff())
       emitBusinessChange(nextBusiness)
       setBusinessName(nextBusiness.name)
       setBusinessDescription(nextBusiness.description)
       saveLocalBusiness(userId, nextBusiness)
+      saveLocalBusinessStaff(userId, createEmptyBusinessStaff())
       saveLocalStars(userId, nextStars)
       emitStarsChange(nextStars)
       emitClose()
     } finally {
       setSavingBusiness(false)
     }
-  }, [businessDescription, businessName, stars, userId])
+  }, [applyBusinessPayload, businessDescription, businessName, emitClose, emitBusinessChange, emitStarsChange, stars, userId])
 
   const handleSaveBusiness = useCallback(async () => {
-    if (!business) return
+    if (!business || !isOwner) return
     const normalizedName = businessName.trim() || business.name
     const normalizedDescription = businessDescription.trim() || business.description
     setSavingBusiness(true)
@@ -2232,27 +2596,27 @@ function BusinessPanel({
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          action: 'profile',
           userId,
           name: normalizedName,
           description: normalizedDescription,
         }),
       })
-      const data = await r.json().catch(() => null) as
-        | { error?: string; business?: BusinessProfile | null; stars?: string }
-        | null
+      const data = await r.json().catch(() => null) as (BusinessPayload & { error?: string }) | null
       if (!r.ok) throw new Error(data?.error ?? '__BUSINESS_LOCAL_SAVE__')
-      const nextBusiness = data?.business ?? {
-        ...business,
-        name: normalizedName,
-        description: normalizedDescription,
-      }
-      setBusiness(nextBusiness)
-      emitBusinessChange(nextBusiness)
-      saveLocalBusiness(userId, nextBusiness)
-      if (typeof data?.stars === 'string') {
-        emitStarsChange(data.stars)
-      }
-    } catch (error) {
+
+      const payload = data
+        ? {
+            ...data,
+            staff: normalizeBusinessStaff(data.staff),
+          }
+        : createLocalBusinessPayload(userId, {
+            ...business,
+            name: normalizedName,
+            description: normalizedDescription,
+          })
+      applyBusinessPayload(payload)
+    } catch {
       const nextBusiness = {
         ...business,
         name: normalizedName,
@@ -2264,7 +2628,7 @@ function BusinessPanel({
     } finally {
       setSavingBusiness(false)
     }
-  }, [business, businessDescription, businessName, userId])
+  }, [applyBusinessPayload, business, businessDescription, businessName, emitBusinessChange, isOwner, userId])
 
   return (
     <section className={variant === 'page' ? 'businessPanel businessPage' : 'panel businessPanel'}>
@@ -2276,72 +2640,112 @@ function BusinessPanel({
           </button>
         )}
       </div>
+
       {loadingBusiness ? (
         <div className="businessNotice">Загружаем бизнес...</div>
       ) : business ? (
-        <>
-          <div className="businessInfoCard">
-            <label className="businessField">
-              <span>Название</span>
-              <input
-                className="businessInput"
-                type="text"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="Название бизнеса"
-              />
-            </label>
-            <label className="businessField">
-              <span>Описание</span>
-              <textarea
-                className="businessTextarea"
-                value={businessDescription}
-                onChange={(e) => setBusinessDescription(e.target.value)}
-                placeholder="Описание бизнеса"
-                rows={3}
-              />
-            </label>
-            <div className="businessCapitalRow">
-              <span className="businessCapitalLabel">Капитал бизнеса</span>
-              <span className="businessCapitalValue">{formatStars(business.capital)}</span>
-            </div>
-            <button
-              type="button"
-              className="businessPrimaryButton"
-              onClick={() => void handleSaveBusiness()}
-              disabled={savingBusiness}
-            >
-              {savingBusiness ? 'Сохраняем...' : 'Сохранить бизнес'}
-            </button>
-          </div>
-
-          <p className="businessHint">Здесь 6 ячеек для наемных сотрудников. В каждую можно пригласить одного друга.</p>
-          {notice && <div className="businessNotice">{notice}</div>}
-          <div className="businessGrid">
-            {Array.from({ length: BUSINESS_SLOT_COUNT }, (_, i) => (
-              <button
-                key={i}
-                type="button"
-                className={`businessSlot ${team[i] ? 'isFilled' : ''}`}
-                onClick={() => setPickerForSlot(i)}
-                aria-label={team[i] ? `Сотрудник ${getUserPrimaryLabel(team[i]!)}` : `Пустой слот сотрудника ${i + 1}`}
-              >
-                <div className="businessSlotIcon" aria-hidden="true">
-                  {team[i] ? <FriendsIcon /> : <GardenIcon />}
+        isEmployee ? (
+          <>
+            <div className="businessGuestCard">
+              <div className="businessGuestEyebrow">Гостевая страница бизнеса</div>
+              <div className="businessGuestTitle">{business.name}</div>
+              <p className="businessHint">{business.description}</p>
+              <div className="businessGuestMeta">
+                <span>Владелец</span>
+                <strong>{owner ? getUserPrimaryLabel(owner) : 'Неизвестно'}</strong>
+              </div>
+              {assignment && (
+                <div className="businessGuestMeta">
+                  <span>Ваша должность</span>
+                  <strong>{assignment.roleName}</strong>
                 </div>
-                <div className="businessSlotCaption">Сотрудник {i + 1}</div>
-                {team[i] ? (
-                  <div className="businessSlotMeta">
-                    <div className="businessSlotPrimary">{getUserPrimaryLabel(team[i]!)}</div>
-                    <div className="businessSlotSecondary">{getUserSecondaryLabel(team[i]!)}</div>
+              )}
+              <div className="businessCapitalRow">
+                <span className="businessCapitalLabel">Капитал бизнеса</span>
+                <span className="businessCapitalValue">{formatStars(business.capital)}</span>
+              </div>
+            </div>
+
+            <div className="businessRoster">
+              {staff.map((slot) => (
+                <div key={slot.slotIndex} className={`businessRosterItem ${slot.userId ? 'isFilled' : ''}`}>
+                  <div className="businessRosterRole">{slot.roleName}</div>
+                  <div className="businessRosterName">
+                    {slot.userId ? getUserPrimaryLabel(slot) : 'Вакансия'}
                   </div>
-                ) : (
-                  <div className="businessSlotEmpty">Пригласить друга</div>
-                )}
+                  <div className="businessRosterSecondary">
+                    {slot.userId ? getUserSecondaryLabel(slot) : 'Сотрудник ещё не назначен'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="businessInfoCard">
+              <label className="businessField">
+                <span>Название</span>
+                <input
+                  className="businessInput"
+                  type="text"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Название бизнеса"
+                />
+              </label>
+              <label className="businessField">
+                <span>Описание</span>
+                <textarea
+                  className="businessTextarea"
+                  value={businessDescription}
+                  onChange={(e) => setBusinessDescription(e.target.value)}
+                  placeholder="Описание бизнеса"
+                  rows={3}
+                />
+              </label>
+              <div className="businessCapitalRow">
+                <span className="businessCapitalLabel">Капитал бизнеса</span>
+                <span className="businessCapitalValue">{formatStars(business.capital)}</span>
+              </div>
+              <button
+                type="button"
+                className="businessPrimaryButton"
+                onClick={() => void handleSaveBusiness()}
+                disabled={savingBusiness}
+              >
+                {savingBusiness ? 'Сохраняем...' : 'Сохранить бизнес'}
               </button>
-            ))}
-          </div>
-        </>
+            </div>
+
+            <p className="businessHint">Выбирайте друзей по слотам и задавайте для каждого название должности.</p>
+            {notice && <div className="businessNotice">{notice}</div>}
+            <div className="businessGrid">
+              {staff.map((slot) => (
+                <button
+                  key={slot.slotIndex}
+                  type="button"
+                  className={`businessSlot ${slot.userId ? 'isFilled' : ''}`}
+                  onClick={() => openStaffPicker(slot.slotIndex)}
+                  aria-label={slot.userId ? `Сотрудник ${getUserPrimaryLabel(slot)}` : `Пустой слот сотрудника ${slot.slotIndex + 1}`}
+                >
+                  <div className="businessSlotIcon" aria-hidden="true">
+                    {slot.userId ? <FriendsIcon /> : <GardenIcon />}
+                  </div>
+                  <div className="businessSlotCaption">Сотрудник {slot.slotIndex + 1}</div>
+                  <div className="businessSlotRole">{slot.roleName}</div>
+                  {slot.userId ? (
+                    <div className="businessSlotMeta">
+                      <div className="businessSlotPrimary">{getUserPrimaryLabel(slot)}</div>
+                      <div className="businessSlotSecondary">{getUserSecondaryLabel(slot)}</div>
+                    </div>
+                  ) : (
+                    <div className="businessSlotEmpty">Пригласить друга</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )
       ) : (
         <div className="businessUnlockCard">
           <p className="businessHint">Откройте свой бизнес за {formatStars(String(BUSINESS_OPEN_COST))} звёзд. После открытия капитал бизнеса стартует с {formatStars(String(BUSINESS_START_CAPITAL))} звёзд.</p>
@@ -2377,15 +2781,12 @@ function BusinessPanel({
         </div>
       )}
 
-      {business && pickerForSlot !== null && (
-        <div
-          className="businessPickerOverlay"
-          onClick={() => setPickerForSlot(null)}
-        >
+      {business && isOwner && pickerForSlot !== null && (
+        <div className="businessPickerOverlay" onClick={() => setPickerForSlot(null)}>
           <div className="businessPicker" onClick={(e) => e.stopPropagation()}>
             <div className="businessPickerHeader">
-              <h3>Выберите сотрудника</h3>
-              {team[pickerForSlot] && (
+              <h3>Сотрудник и должность</h3>
+              {staff[pickerForSlot]?.userId && (
                 <button
                   type="button"
                   className="businessPickerRemove"
@@ -2395,6 +2796,27 @@ function BusinessPanel({
                 </button>
               )}
             </div>
+
+            <label className="businessField">
+              <span>Название должности</span>
+              <input
+                className="businessInput"
+                type="text"
+                value={roleDraft}
+                onChange={(e) => setRoleDraft(e.target.value)}
+                placeholder="Например: маркетолог"
+              />
+            </label>
+
+            <button
+              type="button"
+              className="businessPickerSave"
+              onClick={() => handleSaveRole(pickerForSlot)}
+              disabled={savingBusiness}
+            >
+              {savingBusiness ? 'Сохраняем...' : 'Сохранить должность'}
+            </button>
+
             {loadingFriends ? (
               <p className="businessPickerEmpty">Загружаем друзей...</p>
             ) : availableFriends.length === 0 ? (
@@ -2407,6 +2829,7 @@ function BusinessPanel({
                     type="button"
                     className="businessPickerItem"
                     onClick={() => handleAssign(pickerForSlot, friend)}
+                    disabled={savingBusiness}
                   >
                     <div className="businessPickerItemIcon" aria-hidden="true">
                       <FriendsIcon />
@@ -2419,6 +2842,7 @@ function BusinessPanel({
                 ))}
               </div>
             )}
+
             <button
               type="button"
               className="businessPickerCancel"
@@ -2439,6 +2863,7 @@ function App() {
   const [tab, setTab] = useState<TabKey>('home')
   const [isPackOpen, setIsPackOpen] = useState(false)
   const [isSlotsOpen, setIsSlotsOpen] = useState(false)
+  const [isClickerOpen, setIsClickerOpen] = useState(false)
   const [isApartmentThemeOpen, setIsApartmentThemeOpen] = useState(false)
   const [packClicks, setPackClicks] = useState(0)
   const [isExploding, setIsExploding] = useState(false)
@@ -2553,23 +2978,25 @@ function App() {
     try {
       const r = await fetchWithTimeout(`/api/business?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить бизнес')
-      const data = (await r.json()) as { business: BusinessProfile | null; stars?: string }
-      let nextBusiness = data.business ?? null
-      let nextStars = typeof data.stars === 'string' ? data.stars : null
-
-      if (!nextBusiness && localBusiness) {
-        const restored = await restoreBusinessFromLocal(userId, localBusiness)
-        nextBusiness = restored?.business ?? localBusiness
-        nextStars = restored?.stars ?? nextStars
+      const data = (await r.json()) as BusinessPayload
+      let nextPayload: BusinessPayload = {
+        ...data,
+        staff: normalizeBusinessStaff(data.staff),
       }
 
-      setBusinessProfile(nextBusiness)
-      if (nextBusiness) {
-        saveLocalBusiness(userId, nextBusiness)
+      if (!nextPayload.business && localBusiness) {
+        nextPayload = await restoreBusinessFromLocal(userId, localBusiness)
+          ?? createLocalBusinessPayload(userId, localBusiness)
       }
-      if (typeof nextStars === 'string') {
-        setStars(nextStars)
-        saveLocalStars(userId, nextStars)
+
+      setBusinessProfile(nextPayload.business ?? null)
+      if (nextPayload.mode === 'owner' && nextPayload.business) {
+        saveLocalBusiness(userId, nextPayload.business)
+        saveLocalBusinessStaff(userId, nextPayload.staff)
+      }
+      if (typeof nextPayload.stars === 'string') {
+        setStars(nextPayload.stars)
+        saveLocalStars(userId, nextPayload.stars)
       }
     } catch {
       setBusinessProfile(localBusiness)
@@ -2717,6 +3144,14 @@ function App() {
             >
               <RouletteIcon />
             </button>
+            <button
+              type="button"
+              className="edgeCoinButton"
+              aria-label="Кликер звёзд"
+              onClick={() => setIsClickerOpen(true)}
+            >
+              <CoinIcon />
+            </button>
           </section>
         )}
 
@@ -2816,6 +3251,18 @@ function App() {
           userId={userId}
           stars={stars}
           onClose={() => setIsSlotsOpen(false)}
+          onStarsChange={(nextStars) => {
+            setStars(nextStars)
+            saveLocalStars(userId, nextStars)
+          }}
+        />
+      )}
+
+      {isClickerOpen && (
+        <ClickerModal
+          userId={userId}
+          stars={stars}
+          onClose={() => setIsClickerOpen(false)}
           onStarsChange={(nextStars) => {
             setStars(nextStars)
             saveLocalStars(userId, nextStars)
