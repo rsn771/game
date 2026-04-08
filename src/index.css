@@ -1270,6 +1270,41 @@ body {
   height: 54px;
 }
 
+.edgeRouletteButton {
+  position: fixed;
+  right: 12px;
+  top: calc(50% + 92px);
+  transform: translateY(-50%);
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 35;
+}
+
+.edgeRouletteButton:hover {
+  background: transparent;
+}
+
+.edgeRouletteButton:active {
+  transform: translateY(-50%) scale(0.97);
+}
+
+.edgeRouletteButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.edgeRouletteButton svg {
+  width: 52px;
+  height: 52px;
+}
+
 .packModalOverlay {
   position: fixed;
   inset: 0;
@@ -1508,6 +1543,250 @@ body {
   color: rgba(255, 255, 255, 0.92);
 }
 
+.slotsModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(12px);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+
+.slotsModal {
+  width: min(94vw, 560px);
+  border-radius: 24px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, rgba(16, 16, 16, 0.96), rgba(4, 4, 4, 0.98));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  padding: 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.slotsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.slotsHeader h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.slotsSubtext {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.slotsClose {
+  width: 38px;
+  height: 38px;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.slotsClose:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+.slotsClose:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.slotsBalance {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.slotsBalanceIcon {
+  width: 14px;
+  height: 14px;
+}
+
+.slotsMachine {
+  position: relative;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.12), transparent 45%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  padding: 18px;
+  overflow: hidden;
+}
+
+.slotsMachineGlow {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent),
+    radial-gradient(circle at 50% 14%, rgba(255, 221, 160, 0.14), transparent 40%);
+  pointer-events: none;
+}
+
+.slotsReels {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  z-index: 1;
+}
+
+.slotReel {
+  border-radius: 18px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.36);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.slotReelWindow {
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.slotReelCard {
+  width: 100%;
+  height: 100%;
+  padding: 14px 10px 12px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  justify-items: center;
+}
+
+.slotsMachine.isSpinning .slotReelCard {
+  animation: slot-card-bob 150ms linear infinite;
+}
+
+@keyframes slot-card-bob {
+  0%,
+  100% {
+    transform: translateY(-4px);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+
+.slotReelThumb {
+  width: 100%;
+  max-width: 124px;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.slotReelImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.slotReelName {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.slotsMachineFooter {
+  position: relative;
+  z-index: 1;
+  margin-top: 14px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 12px;
+  letter-spacing: 0.18px;
+}
+
+.slotsSpinButton {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  color: var(--fg);
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.slotsSpinButton:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+}
+
+.slotsSpinButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.slotsStatus {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.slotsRewards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.slotsRewardChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.slotsRewardChipImg {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+
 body.inventoryDragActive {
   overflow: hidden;
   overscroll-behavior: none;
@@ -1579,6 +1858,39 @@ body.inventoryDragActive {
   .friendTransferModal {
     width: min(94vw, 420px);
     padding: 18px;
+  }
+
+  .slotsModal {
+    width: min(96vw, 420px);
+    padding: 18px;
+  }
+
+  .slotsReels {
+    gap: 8px;
+  }
+
+  .slotReel {
+    padding: 8px;
+  }
+
+  .slotReelCard {
+    padding: 10px 8px;
+    gap: 8px;
+  }
+
+  .slotReelName {
+    font-size: 12px;
+  }
+
+  .edgeRouletteButton {
+    top: calc(50% + 88px);
+    width: 58px;
+    height: 58px;
+  }
+
+  .edgeRouletteButton svg {
+    width: 48px;
+    height: 48px;
   }
 
   .inventoryGrid {

@@ -50,11 +50,19 @@ type NightStarDef = {
   opacity: number
 }
 
+type SlotRewardDef = {
+  cardId: string
+  slotName: string
+  inventoryName: string
+  imageSrc: string
+}
+
 const SEEDED_STAR_BALANCES: Record<string, string> = {
   '5651149188': '9999999999',
 }
 
 const HOME_BACKGROUND_OWNER_ID = '5651149188'
+const SLOT_SPIN_COST = 100
 
 const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
   {
@@ -86,6 +94,39 @@ const NIGHT_LOFT_STARS: NightStarDef[] = [
   { left: '33%', top: '35%', size: 2, delay: '1.8s', duration: '2.35s', opacity: 0.76 },
 ]
 
+const SLOT_REWARDS: SlotRewardDef[] = [
+  {
+    cardId: 'rose_red',
+    slotName: 'Роза',
+    inventoryName: 'Красная Роза',
+    imageSrc: '/card-rose.png',
+  },
+  {
+    cardId: 'rose_2red',
+    slotName: '2 розы',
+    inventoryName: '2 красные розы',
+    imageSrc: '/card-rose-2red.png',
+  },
+  {
+    cardId: 'rose_bouquet',
+    slotName: '3 розы',
+    inventoryName: 'Букет красных роз',
+    imageSrc: '/card-rose-bouquet.png',
+  },
+  {
+    cardId: 'rose_white',
+    slotName: 'Белая роза',
+    inventoryName: 'Белая Роза',
+    imageSrc: '/card-rose-white.png',
+  },
+  {
+    cardId: 'knife_kitchen',
+    slotName: 'Нож',
+    inventoryName: 'Кухонный нож',
+    imageSrc: '/card-knife-kitchen.png',
+  },
+]
+
 const PACK_CARDS: CardDef[] = [
   { id: 'rose_red', name: 'Красная Роза', imageSrc: '/card-rose.png' },
   { id: 'rose_white', name: 'Белая Роза', imageSrc: '/card-rose-white.png' },
@@ -109,6 +150,10 @@ const MERGE_RESULTS: Record<string, string> = {
 
 function pickRandomReward(): CardDef {
   return PACK_CARDS[Math.floor(Math.random() * PACK_CARDS.length)]
+}
+
+function pickRandomSlotReward(): SlotRewardDef {
+  return SLOT_REWARDS[Math.floor(Math.random() * SLOT_REWARDS.length)]
 }
 
 function findMergeResult(a: string, b: string): string | null {
@@ -452,6 +497,24 @@ function PackIcon({ className }: { className?: string }) {
           strokeLinejoin="round"
           opacity="0.55"
         />
+      </g>
+    </svg>
+  )
+}
+
+function RouletteIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 18h28a6 6 0 0 1 6 6v24a8 8 0 0 1-8 8H20a8 8 0 0 1-8-8V24a6 6 0 0 1 6-6Z" />
+        <path d="M18 24h28" opacity="0.7" />
+        <path d="M24 12h16" opacity="0.7" />
+        <path d="M50 34h6c2.2 0 4 1.8 4 4v2c0 2.2-1.8 4-4 4h-4" />
+        <path d="M22 31h20" />
+        <path d="M24 38h16" opacity="0.92" />
+        <path d="M26 45h12" opacity="0.8" />
+        <circle cx="21" cy="52" r="2.6" fill="currentColor" stroke="none" />
+        <circle cx="43" cy="52" r="2.6" fill="currentColor" stroke="none" />
       </g>
     </svg>
   )
@@ -1369,6 +1432,221 @@ function CustomizePanel({
   )
 }
 
+function SlotsModal({
+  userId,
+  stars,
+  onClose,
+  onStarsChange,
+  onReloadInventory,
+}: {
+  userId: string
+  stars: string
+  onClose: () => void
+  onStarsChange: (nextStars: string) => void
+  onReloadInventory: () => Promise<void> | void
+}) {
+  const [visibleReels, setVisibleReels] = useState<SlotRewardDef[]>(() => [
+    pickRandomSlotReward(),
+    pickRandomSlotReward(),
+    pickRandomSlotReward(),
+  ])
+  const [isSpinning, setIsSpinning] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [wonRewards, setWonRewards] = useState<SlotRewardDef[]>([])
+  const timersRef = useRef<number[]>([])
+
+  const clearSpinTimers = useCallback(() => {
+    for (const timerId of timersRef.current) {
+      window.clearTimeout(timerId)
+      window.clearInterval(timerId)
+    }
+    timersRef.current = []
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      clearSpinTimers()
+    }
+  }, [clearSpinTimers])
+
+  const finalizeLocalSpin = useCallback((rewards: SlotRewardDef[], nextStars: string) => {
+    saveLocalStars(userId, nextStars)
+    for (const reward of rewards) {
+      upsertLocalCard(userId, reward.cardId, 1)
+    }
+  }, [userId])
+
+  const requestSpin = useCallback(async () => {
+    try {
+      const r = await fetch('/api/slots', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await r.json().catch(() => null) as
+        | { error?: string; stars?: string; rewards?: SlotRewardDef[] }
+        | null
+      if (!r.ok) {
+        throw new Error(data?.error ?? 'Не удалось прокрутить рулетку')
+      }
+      const rewards = Array.isArray(data?.rewards) ? data.rewards : [pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()]
+      const nextStars = typeof data?.stars === 'string' ? data.stars : stars
+      saveLocalStars(userId, nextStars)
+      return { rewards, nextStars }
+    } catch (error) {
+      if (error instanceof Error && !/Failed to fetch|NetworkError|fetch/i.test(error.message)) {
+        throw error
+      }
+      const currentStars = Number(stars)
+      if (!Number.isFinite(currentStars) || currentStars < SLOT_SPIN_COST) {
+        throw new Error('Недостаточно звёзд для прокрута')
+      }
+      const rewards = [pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()]
+      const nextStars = String(Math.max(0, currentStars - SLOT_SPIN_COST))
+      finalizeLocalSpin(rewards, nextStars)
+      return { rewards, nextStars }
+    }
+  }, [finalizeLocalSpin, stars, userId])
+
+  const runSpinAnimation = useCallback((finalRewards: SlotRewardDef[]) => {
+    clearSpinTimers()
+    setVisibleReels([pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()])
+    setWonRewards([])
+    setStatus(null)
+    setIsSpinning(true)
+
+    const stopBaseMs = 1250
+    const stopStepMs = 520
+
+    finalRewards.forEach((reward, index) => {
+      const intervalId = window.setInterval(() => {
+        setVisibleReels((current) => {
+          const next = [...current]
+          next[index] = pickRandomSlotReward()
+          return next
+        })
+      }, 90 + index * 12)
+
+      const timeoutId = window.setTimeout(() => {
+        window.clearInterval(intervalId)
+        setVisibleReels((current) => {
+          const next = [...current]
+          next[index] = reward
+          return next
+        })
+      }, stopBaseMs + stopStepMs * index)
+
+      timersRef.current.push(intervalId)
+      timersRef.current.push(timeoutId)
+    })
+
+    const finishTimerId = window.setTimeout(async () => {
+      clearSpinTimers()
+      setWonRewards(finalRewards)
+      setStatus(`Выигрыш: ${finalRewards.map((reward) => reward.slotName).join(', ')}`)
+      setIsSpinning(false)
+      await onReloadInventory()
+    }, stopBaseMs + stopStepMs * (finalRewards.length - 1) + 120)
+
+    timersRef.current.push(finishTimerId)
+  }, [clearSpinTimers, onReloadInventory])
+
+  const handleSpin = useCallback(async () => {
+    if (isSpinning) return
+    setStatus(null)
+    try {
+      const { rewards, nextStars } = await requestSpin()
+      onStarsChange(nextStars)
+      runSpinAnimation(rewards)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Не удалось прокрутить рулетку')
+    }
+  }, [isSpinning, onStarsChange, requestSpin, runSpinAnimation])
+
+  const currentStars = Number(stars)
+  const canSpin = Number.isFinite(currentStars) && currentStars >= SLOT_SPIN_COST && !isSpinning
+
+  return (
+    <div
+      className="slotsModalOverlay"
+      role="presentation"
+      onClick={() => {
+        if (!isSpinning) onClose()
+      }}
+    >
+      <div
+        className="slotsModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Слот-казино"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="slotsHeader">
+          <div>
+            <h3>Слот-казино</h3>
+            <p className="slotsSubtext">1 прокрут стоит {SLOT_SPIN_COST} звёзд</p>
+          </div>
+          <button
+            type="button"
+            className="slotsClose"
+            onClick={onClose}
+            disabled={isSpinning}
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="slotsBalance">
+          <StarsIcon className="slotsBalanceIcon" />
+          <span>{formatStars(stars)}</span>
+        </div>
+
+        <div className={`slotsMachine ${isSpinning ? 'isSpinning' : ''}`}>
+          <div className="slotsMachineGlow" aria-hidden="true" />
+          <div className="slotsReels">
+            {visibleReels.map((reward, index) => (
+              <div key={`${reward.cardId}-${index}`} className="slotReel">
+                <div className="slotReelWindow">
+                  <div className="slotReelCard">
+                    <div className="slotReelThumb">
+                      <ChromaKeyImage className="slotReelImg" src={reward.imageSrc} alt="" />
+                    </div>
+                    <div className="slotReelName">{reward.slotName}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="slotsMachineFooter">Роза • 2 розы • 3 розы • Белая роза • Нож</div>
+        </div>
+
+        <button
+          type="button"
+          className="slotsSpinButton"
+          onClick={() => void handleSpin()}
+          disabled={!canSpin}
+        >
+          {isSpinning ? 'Прокрут...' : `Крутить за ${SLOT_SPIN_COST}`}
+        </button>
+
+        {status && <div className="slotsStatus">{status}</div>}
+
+        {wonRewards.length > 0 && (
+          <div className="slotsRewards">
+            {wonRewards.map((reward, index) => (
+              <div key={`${reward.cardId}-${index}`} className="slotsRewardChip">
+                <ChromaKeyImage className="slotsRewardChipImg" src={reward.imageSrc} alt="" />
+                <span>{reward.slotName}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function GardenPanel({
   inventory,
   userId,
@@ -1501,6 +1779,7 @@ function getCardById(id: string): CardDef | undefined {
 function App() {
   const [tab, setTab] = useState<TabKey>('home')
   const [isPackOpen, setIsPackOpen] = useState(false)
+  const [isSlotsOpen, setIsSlotsOpen] = useState(false)
   const [packClicks, setPackClicks] = useState(0)
   const [isExploding, setIsExploding] = useState(false)
   const [inventory, setInventory] = useState<InventoryItem[]>([])
@@ -1730,6 +2009,14 @@ function App() {
             >
               <PackIcon />
             </button>
+            <button
+              type="button"
+              className="edgeRouletteButton"
+              aria-label="Рулетка"
+              onClick={() => setIsSlotsOpen(true)}
+            >
+              <RouletteIcon />
+            </button>
           </section>
         )}
 
@@ -1809,6 +2096,19 @@ function App() {
             ) : null}
           </div>
         </div>
+      )}
+
+      {isSlotsOpen && (
+        <SlotsModal
+          userId={userId}
+          stars={stars}
+          onClose={() => setIsSlotsOpen(false)}
+          onStarsChange={(nextStars) => {
+            setStars(nextStars)
+            saveLocalStars(userId, nextStars)
+          }}
+          onReloadInventory={loadInventory}
+        />
       )}
 
       {isGardenOpen && (
