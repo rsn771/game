@@ -824,13 +824,11 @@ function StarsIcon({ className }: { className?: string }) {
 function CoinIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
-      <g fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="32" cy="32" r="22" />
-        <circle cx="32" cy="32" r="15" opacity="0.7" />
-        <path d="M26 32h12" />
-        <path d="M32 26v12" />
-        <path d="M22 18c3-2.8 6.8-4 10-4" opacity="0.52" />
-      </g>
+      <circle cx="32" cy="32" r="22" fill="#fbfbfb" stroke="#090909" strokeWidth="3" />
+      <circle cx="32" cy="32" r="15.5" fill="none" stroke="#1a1a1a" strokeWidth="2.6" />
+      <path d="M26 32h12" fill="none" stroke="#090909" strokeWidth="2.8" strokeLinecap="round" />
+      <path d="M32 26v12" fill="none" stroke="#090909" strokeWidth="2.8" strokeLinecap="round" />
+      <path d="M22 18c3-2.8 6.8-4 10-4" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" opacity="0.92" />
     </svg>
   )
 }
