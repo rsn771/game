@@ -1487,14 +1487,21 @@ function SlotsModal({
         | { error?: string; stars?: string; rewards?: SlotRewardDef[] }
         | null
       if (!r.ok) {
-        throw new Error(data?.error ?? 'Не удалось прокрутить рулетку')
+        if (r.status === 400 && data?.error) {
+          throw new Error(data.error)
+        }
+        throw new Error('__SLOTS_LOCAL_FALLBACK__')
       }
       const rewards = Array.isArray(data?.rewards) ? data.rewards : [pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()]
       const nextStars = typeof data?.stars === 'string' ? data.stars : stars
       saveLocalStars(userId, nextStars)
       return { rewards, nextStars }
     } catch (error) {
-      if (error instanceof Error && !/Failed to fetch|NetworkError|fetch/i.test(error.message)) {
+      if (
+        error instanceof Error &&
+        error.message !== '__SLOTS_LOCAL_FALLBACK__' &&
+        !/Failed to fetch|NetworkError|fetch/i.test(error.message)
+      ) {
         throw error
       }
       const currentStars = Number(stars)
@@ -1612,7 +1619,6 @@ function SlotsModal({
                     <div className="slotReelThumb">
                       <ChromaKeyImage className="slotReelImg" src={reward.imageSrc} alt="" />
                     </div>
-                    <div className="slotReelName">{reward.slotName}</div>
                   </div>
                 </div>
               </div>
