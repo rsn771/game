@@ -1523,7 +1523,7 @@ function FriendsPanel({
   const loadFriendLists = useCallback(async () => {
     setLoadingLists(true)
     try {
-      const r = await fetch(`/api/friends?userId=${encodeURIComponent(userId)}`)
+      const r = await fetchWithTimeout(`/api/friends?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить друзей')
       const data = (await r.json()) as FriendLists
       setLists(data)
@@ -1538,15 +1538,17 @@ function FriendsPanel({
     const trimmed = normalizeUserSearch(term)
     if (!trimmed) {
       setSearchResults([])
+      setLoadingSearch(false)
       return
     }
     setLoadingSearch(true)
     try {
-      const r = await fetch(`/api/users?userId=${encodeURIComponent(userId)}&query=${encodeURIComponent(trimmed)}`)
+      const r = await fetchWithTimeout(`/api/users?userId=${encodeURIComponent(userId)}&query=${encodeURIComponent(trimmed)}`)
       if (!r.ok) throw new Error('Поиск недоступен')
       const data = (await r.json()) as { users: UserPreview[] }
       setSearchResults(data.users ?? [])
     } catch {
+      setSearchResults([])
       setNotice('Не удалось выполнить поиск профиля')
     } finally {
       setLoadingSearch(false)
