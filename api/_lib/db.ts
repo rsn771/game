@@ -9,6 +9,7 @@ const INVENTORY_RESET_VERSION = 1
 const SCHEMA_LOCK_KEY = 41_523_301
 
 type SqlRunner = typeof sql
+let schemaReadyPromise: Promise<void> | null = null
 
 export type UserProfileInput = {
   userId: string
@@ -158,7 +159,7 @@ async function resetInventoryIfNeeded(query: SqlRunner) {
   `
 }
 
-export async function ensureSchema() {
+async function ensureSchemaOnce() {
   const client = await sql.connect()
   const query = client.sql.bind(client) as SqlRunner
 
@@ -259,6 +260,17 @@ export async function ensureSchema() {
       client.release()
     }
   }
+}
+
+export async function ensureSchema() {
+  if (!schemaReadyPromise) {
+    schemaReadyPromise = ensureSchemaOnce().catch((error) => {
+      schemaReadyPromise = null
+      throw error
+    })
+  }
+
+  await schemaReadyPromise
 }
 
 export async function ensureUser(userId: string) {

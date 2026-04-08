@@ -64,7 +64,7 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
 
   if (req.method === 'POST') {
     const body = await readJsonBody<
-      | { userId?: string; name?: string; description?: string }
+      | { userId?: string; name?: string; description?: string; restore?: boolean }
       | null
     >(req)
     const userId = body?.userId
@@ -76,13 +76,41 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
     await ensureUser(userId)
 
     const existing = await loadBusiness(userId)
+    const isRestore = body?.restore === true
     if (existing) {
+      if (isRestore) {
+        sendJson(res, {
+          ok: true,
+          business: existing,
+          stars: await loadStars(userId),
+        })
+        return
+      }
+
       sendJson(res, { error: 'Бизнес уже открыт' }, 409)
       return
     }
 
     const name = normalizeRequiredText(body?.name, 'Мой бизнес')
     const description = normalizeRequiredText(body?.description, 'Описание бизнеса появится позже.')
+
+    if (isRestore) {
+      await sql`
+        insert into businesses (owner_user_id, name, description, capital)
+        values (${userId}, ${name}, ${description}, ${BUSINESS_START_CAPITAL});
+      `
+
+      sendJson(res, {
+        ok: true,
+        stars: await loadStars(userId),
+        business: {
+          name,
+          description,
+          capital: String(BUSINESS_START_CAPITAL),
+        },
+      })
+      return
+    }
 
     const { rows: starRows } = await sql<{ stars: string }>`
       update users

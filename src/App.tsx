@@ -430,6 +430,52 @@ function getFallbackStars(userId: string): string {
   return Number(local) > Number(seeded) ? local : seeded
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 8000) {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
+async function restoreBusinessFromLocal(userId: string, business: BusinessProfile) {
+  try {
+    const r = await fetchWithTimeout('/api/business', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        name: business.name,
+        description: business.description,
+        restore: true,
+      }),
+    })
+
+    const data = (await r.json().catch(() => null)) as
+      | { business?: BusinessProfile | null; stars?: string }
+      | null
+
+    if (!r.ok) return null
+
+    return {
+      business: data?.business ?? {
+        name: business.name,
+        description: business.description,
+        capital: String(BUSINESS_START_CAPITAL),
+      },
+      stars: typeof data?.stars === 'string' ? data.stars : null,
+    }
+  } catch {
+    return null
+  }
+}
+
 function formatStars(stars: string): string {
   const numeric = Number(stars)
   if (!Number.isFinite(numeric)) return stars
@@ -1999,20 +2045,31 @@ function BusinessPanel({
 
   const loadBusiness = useCallback(async () => {
     setLoadingBusiness(true)
+    const localBusiness = loadLocalBusiness(userId)
     try {
-      const r = await fetch(`/api/business?userId=${encodeURIComponent(userId)}`)
+      const r = await fetchWithTimeout(`/api/business?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить бизнес')
       const data = (await r.json()) as { business: BusinessProfile | null; stars?: string }
-      const nextBusiness = data.business ?? null
+      let nextBusiness = data.business ?? null
+      let nextStars = typeof data.stars === 'string' ? data.stars : null
+
+      if (!nextBusiness && localBusiness) {
+        const restored = await restoreBusinessFromLocal(userId, localBusiness)
+        nextBusiness = restored?.business ?? localBusiness
+        nextStars = restored?.stars ?? nextStars
+      }
+
       setBusiness(nextBusiness)
       setBusinessName(nextBusiness?.name ?? '')
       setBusinessDescription(nextBusiness?.description ?? '')
       onBusinessChange?.(nextBusiness)
-      if (typeof data.stars === 'string') {
-        onStarsChange(data.stars)
+      if (nextBusiness) {
+        saveLocalBusiness(userId, nextBusiness)
+      }
+      if (typeof nextStars === 'string') {
+        onStarsChange(nextStars)
       }
     } catch {
-      const localBusiness = loadLocalBusiness(userId)
       setBusiness(localBusiness)
       setBusinessName(localBusiness?.name ?? '')
       setBusinessDescription(localBusiness?.description ?? '')
@@ -2483,21 +2540,30 @@ function App() {
   }, [loadProfile])
 
   const loadBusinessStatus = useCallback(async () => {
+    const localBusiness = loadLocalBusiness(userId)
     try {
-      const r = await fetch(`/api/business?userId=${encodeURIComponent(userId)}`)
+      const r = await fetchWithTimeout(`/api/business?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить бизнес')
       const data = (await r.json()) as { business: BusinessProfile | null; stars?: string }
-      const nextBusiness = data.business ?? null
+      let nextBusiness = data.business ?? null
+      let nextStars = typeof data.stars === 'string' ? data.stars : null
+
+      if (!nextBusiness && localBusiness) {
+        const restored = await restoreBusinessFromLocal(userId, localBusiness)
+        nextBusiness = restored?.business ?? localBusiness
+        nextStars = restored?.stars ?? nextStars
+      }
+
       setBusinessProfile(nextBusiness)
       if (nextBusiness) {
         saveLocalBusiness(userId, nextBusiness)
       }
-      if (typeof data.stars === 'string') {
-        setStars(data.stars)
-        saveLocalStars(userId, data.stars)
+      if (typeof nextStars === 'string') {
+        setStars(nextStars)
+        saveLocalStars(userId, nextStars)
       }
     } catch {
-      setBusinessProfile(loadLocalBusiness(userId))
+      setBusinessProfile(localBusiness)
     }
   }, [userId])
 
