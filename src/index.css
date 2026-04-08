@@ -2705,33 +2705,37 @@ body {
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background:
-    radial-gradient(circle at 50% 24%, rgba(255, 228, 128, 0.18), transparent 24%),
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.1), transparent 28%),
     rgba(255, 255, 255, 0.03);
 }
 
 .clickerCoinButton {
   position: relative;
-  width: 180px;
-  height: 180px;
+  width: 248px;
+  height: 196px;
   appearance: none;
-  border: none;
-  clip-path: polygon(50% 0%, 61% 34%, 98% 35%, 68% 57%, 79% 92%, 50% 72%, 21% 92%, 32% 57%, 2% 35%, 39% 34%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 30px;
   background:
-    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.98), rgba(242, 242, 242, 0.96) 28%, rgba(132, 132, 132, 0.9) 62%, rgba(12, 12, 12, 1));
+    linear-gradient(180deg, rgba(30, 30, 30, 0.96), rgba(8, 8, 8, 0.98));
   color: #060606;
   display: grid;
   place-items: center;
   cursor: pointer;
-  filter: drop-shadow(0 18px 26px rgba(0, 0, 0, 0.34));
+  overflow: hidden;
   box-shadow:
-    inset 0 5px 14px rgba(255, 255, 255, 0.48),
-    inset 0 -16px 26px rgba(0, 0, 0, 0.4);
-  transition: transform 120ms ease, filter 120ms ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -16px 34px rgba(0, 0, 0, 0.38),
+    0 18px 36px rgba(0, 0, 0, 0.34);
+  transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
 .clickerCoinButton:hover {
   transform: translateY(-2px) scale(1.01);
-  filter: drop-shadow(0 22px 30px rgba(0, 0, 0, 0.38));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -18px 38px rgba(0, 0, 0, 0.42),
+    0 22px 40px rgba(0, 0, 0, 0.38);
 }
 
 .clickerCoinButton:active,
@@ -2739,24 +2743,254 @@ body {
   transform: scale(0.97);
 }
 
-.clickerCoinIcon {
-  width: 92px;
-  height: 92px;
-  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.28));
-}
-
 .clickerCoinSpark {
   position: absolute;
-  inset: 14px;
-  clip-path: inherit;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 60%);
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 26%, rgba(255, 255, 255, 0.08), transparent 34%),
+    radial-gradient(circle at 50% 76%, rgba(255, 255, 255, 0.06), transparent 42%);
   pointer-events: none;
+}
+
+.clickerDeskScene {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: block;
+  isolation: isolate;
+}
+
+.clickerLaptop {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 164px;
+  height: 124px;
+  z-index: 3;
+  transform: translateX(-50%);
+  animation: clickerLaptopIdle 2.8s ease-in-out infinite;
+}
+
+.clickerLaptopScreen {
+  position: absolute;
+  inset: 0 16px 38px;
+  z-index: 2;
+  border-radius: 18px 18px 14px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(circle at 50% 32%, rgba(255, 255, 255, 0.1), transparent 45%),
+    linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(4, 4, 4, 1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 20px rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.clickerLaptopCamera {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  transform: translateX(-50%);
+}
+
+.clickerLaptopCode {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 22px;
+  display: grid;
+  gap: 9px;
+  animation: clickerScreenPulse 2.2s ease-in-out infinite;
+}
+
+.clickerLaptopLine {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.92), rgba(178, 178, 178, 0.32));
+}
+
+.clickerLaptopLine.isWide {
+  width: 100%;
+}
+
+.clickerLaptopLine.isShort {
+  width: 56%;
+}
+
+.clickerLaptopBase {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  bottom: -22px;
+  height: 58px;
+  z-index: 1;
+  border-radius: 0 0 28px 28px;
+  clip-path: polygon(18% 0%, 82% 0%, 96% 100%, 4% 100%);
+  background:
+    linear-gradient(180deg, rgba(196, 196, 196, 0.96), rgba(92, 92, 92, 0.92) 54%, rgba(18, 18, 18, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 10px 18px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.clickerLaptopBase::before {
+  content: '';
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  top: 0;
+  height: 7px;
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0));
+  opacity: 0.82;
+}
+
+.clickerLaptopBase::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  width: 60px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  transform: translateX(-50%);
+}
+
+.clickerLaptopKeyboard {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 12px;
+  bottom: 10px;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 4px;
+  padding: 5px 12px 4px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -6px 10px rgba(0, 0, 0, 0.16);
+  transform-origin: center top;
+  transform: perspective(320px) rotateX(63deg) scale(1.08);
+}
+
+.clickerKeyboardRow {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+}
+
+.clickerKeyboardRow:nth-child(1) {
+  transform: scaleX(0.72);
+}
+
+.clickerKeyboardRow:nth-child(2) {
+  transform: scaleX(0.82);
+}
+
+.clickerKeyboardRow:nth-child(3) {
+  transform: scaleX(0.92);
+}
+
+.clickerKeyboardRow.isWide .clickerKey {
+  width: 24px;
+}
+
+.clickerKey {
+  width: 12px;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(196, 196, 196, 0.24));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 1px 0 rgba(0, 0, 0, 0.16);
+}
+
+.clickerTrackpad {
+  width: 38px;
+  height: 4px;
+  margin-top: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.clickerHands {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 92px;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.clickerHand {
+  position: absolute;
+  bottom: 0;
+  width: 88px;
+  height: 58px;
+  pointer-events: none;
+  border-radius: 42px 42px 24px 24px;
+  background:
+    linear-gradient(180deg, rgba(252, 252, 252, 0.98), rgba(194, 194, 194, 0.92) 55%, rgba(88, 88, 88, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 10px 18px rgba(0, 0, 0, 0.22);
+}
+
+.clickerHand::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 7px;
+  height: 20px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.clickerHandLeft {
+  left: 24px;
+  transform: rotate(14deg);
+  transform-origin: 80% 100%;
+  animation: clickerHandIdleLeft 1.4s ease-in-out infinite;
+}
+
+.clickerHandRight {
+  right: 24px;
+  transform: rotate(-14deg);
+  transform-origin: 20% 100%;
+  animation: clickerHandIdleRight 1.4s ease-in-out infinite 0.12s;
+}
+
+.clickerCoinButton.isBursting .clickerHandLeft {
+  animation-duration: 180ms;
+}
+
+.clickerCoinButton.isBursting .clickerHandRight {
+  animation-duration: 180ms;
+}
+
+.clickerCoinButton.isBursting .clickerLaptopScreen {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 28px rgba(255, 255, 255, 0.1);
 }
 
 .clickerTapFloat {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 44%;
   color: rgba(255, 255, 255, 0.96);
   font-size: 24px;
   font-weight: 800;
@@ -2781,6 +3015,52 @@ body {
   100% {
     opacity: 0;
     transform: translate(calc(-50% + var(--clicker-float-drift, 0px)), -124px) scale(1.04);
+  }
+}
+
+@keyframes clickerLaptopIdle {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+
+  50% {
+    transform: translateX(-50%) translateY(-2px);
+  }
+}
+
+@keyframes clickerScreenPulse {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(1px);
+  }
+}
+
+@keyframes clickerHandIdleLeft {
+  0%,
+  100% {
+    transform: rotate(14deg) translateY(0);
+  }
+
+  50% {
+    transform: rotate(8deg) translateY(-6px);
+  }
+}
+
+@keyframes clickerHandIdleRight {
+  0%,
+  100% {
+    transform: rotate(-14deg) translateY(0);
+  }
+
+  50% {
+    transform: rotate(-8deg) translateY(-6px);
   }
 }
 
@@ -2995,13 +3275,12 @@ body.inventoryDragActive {
   }
 
   .clickerCoinButton {
-    width: 154px;
-    height: 154px;
+    width: 214px;
+    height: 172px;
   }
 
-  .clickerCoinIcon {
-    width: 80px;
-    height: 80px;
+  .clickerTapFloat {
+    font-size: 21px;
   }
 
   .inventoryGrid {

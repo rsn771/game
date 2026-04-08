@@ -2248,7 +2248,6 @@ function ClickerModal({
     emitStarsChange(nextStars)
     queuedDeltaRef.current += 1
     setTapBurst((value) => value + 1)
-    setStatus('+1 звезда')
     const nextFloatId = floatIdRef.current + 1
     floatIdRef.current = nextFloatId
     setTapFloats((current) => [...current, { id: nextFloatId, drift: Math.round((Math.random() - 0.5) * 28) }])
@@ -2308,7 +2307,45 @@ function ClickerModal({
             onClick={handleTap}
             aria-label="Получить звезду"
           >
-            <StarsIcon className="clickerCoinIcon" />
+            <span className="clickerDeskScene" aria-hidden="true">
+              <span className="clickerLaptop">
+                <span className="clickerLaptopScreen">
+                  <span className="clickerLaptopCamera" />
+                  <span className="clickerLaptopCode">
+                    <span className="clickerLaptopLine isWide" />
+                    <span className="clickerLaptopLine" />
+                    <span className="clickerLaptopLine isShort" />
+                  </span>
+                </span>
+                <span className="clickerLaptopBase">
+                  <span className="clickerLaptopKeyboard">
+                    <span className="clickerKeyboardRow">
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                    </span>
+                    <span className="clickerKeyboardRow">
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                    </span>
+                    <span className="clickerKeyboardRow isWide">
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                      <span className="clickerKey" />
+                    </span>
+                    <span className="clickerTrackpad" />
+                  </span>
+                </span>
+              </span>
+              <span className="clickerHands">
+                <span className="clickerHand clickerHandLeft" />
+                <span className="clickerHand clickerHandRight" />
+              </span>
+            </span>
             <span className="clickerCoinSpark" aria-hidden="true" />
           </button>
         </div>
