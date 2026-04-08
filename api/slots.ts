@@ -6,6 +6,7 @@ export const config = {
 }
 
 const SLOT_SPIN_COST = 100
+const SLOT_JACKPOT_STARS = 10_000
 
 type SlotRewardDef = {
   cardId: string
@@ -82,6 +83,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const rewards = [pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()]
+  const isJackpot = rewards.every((reward) => reward.cardId === rewards[0].cardId)
 
   for (const reward of rewards) {
     await sql`
@@ -92,9 +94,23 @@ export default async function handler(req: Request): Promise<Response> {
     `
   }
 
+  let finalStars = nextStars
+
+  if (isJackpot) {
+    const { rows: jackpotRows } = await sql<{ stars: string }>`
+      update users
+      set stars = stars + ${SLOT_JACKPOT_STARS},
+          updated_at = now()
+      where tg_user_id = ${userId}
+      returning stars::text as stars;
+    `
+    finalStars = jackpotRows[0]?.stars ?? nextStars
+  }
+
   return json({
     ok: true,
-    stars: nextStars,
+    stars: finalStars,
     rewards,
+    jackpot: isJackpot,
   })
 }

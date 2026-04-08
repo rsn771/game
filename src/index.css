@@ -14,6 +14,7 @@
   --topbar-total-height: calc(var(--topbar-base-height) + var(--safe-top) + var(--tg-chrome-offset));
   --tabbar-base-height: 76px;
   --tabbar-total-height: calc(var(--tabbar-base-height) + var(--safe-bottom));
+  --slot-reel-item-size: 188px;
 
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -651,6 +652,261 @@ body {
 
 .gardenPanelClose:hover {
   color: var(--fg);
+}
+
+.businessPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.businessPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.businessPanelHeader h2 {
+  margin: 0;
+}
+
+.businessHint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.businessNotice {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+}
+
+.businessGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.businessSlot {
+  appearance: none;
+  min-height: 152px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  color: var(--fg);
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.businessSlot:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.businessSlot.isFilled {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.businessSlotIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.businessSlotIcon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.businessSlotCaption {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22px;
+  color: rgba(255, 255, 255, 0.56);
+  text-transform: uppercase;
+}
+
+.businessSlotMeta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.businessSlotPrimary {
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.businessSlotSecondary {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.businessSlotEmpty {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.businessPickerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+}
+
+.businessPicker {
+  width: min(92vw, 430px);
+  max-height: 76vh;
+  overflow-y: auto;
+  border-radius: 22px;
+  border: 1px solid var(--line-strong);
+  background: rgba(0, 0, 0, 0.94);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.businessPickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.businessPickerHeader h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.businessPickerRemove {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.businessPickerRemove:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.businessPickerList {
+  display: grid;
+  gap: 10px;
+}
+
+.businessPickerItem {
+  appearance: none;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.businessPickerItem:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.businessPickerItemIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  flex: 0 0 auto;
+}
+
+.businessPickerItemIcon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.businessPickerItemMeta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.businessPickerItemPrimary {
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.businessPickerItemSecondary {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.businessPickerEmpty {
+  margin: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.businessPickerCancel {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--btn-bg);
+  color: var(--fg);
+  padding: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.businessPickerCancel:hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--line-strong);
 }
 
 .friendsPanel {
@@ -1662,35 +1918,27 @@ body {
 }
 
 .slotReelWindow {
-  aspect-ratio: 3 / 4;
+  position: relative;
+  height: var(--slot-reel-item-size);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
-  display: grid;
-  place-items: center;
   overflow: hidden;
+}
+
+.slotReelTrack {
+  display: flex;
+  flex-direction: column;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.16, 0.84, 0.24, 1);
 }
 
 .slotReelCard {
   width: 100%;
-  height: 100%;
+  height: var(--slot-reel-item-size);
   padding: 14px 10px;
   display: grid;
   align-items: center;
   justify-items: center;
-}
-
-.slotsMachine.isSpinning .slotReelCard {
-  animation: slot-card-bob 150ms linear infinite;
-}
-
-@keyframes slot-card-bob {
-  0%,
-  100% {
-    transform: translateY(-4px);
-  }
-  50% {
-    transform: translateY(4px);
-  }
 }
 
 .slotReelThumb {
@@ -1707,6 +1955,25 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.slotReelShade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 28px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.slotReelShade.isTop {
+  top: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.48), transparent);
+}
+
+.slotReelShade.isBottom {
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.48), transparent);
 }
 
 .slotsMachineFooter {
@@ -1832,6 +2099,15 @@ body.inventoryDragActive {
     grid-template-columns: 1fr;
   }
 
+  .businessGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .businessSlot {
+    min-height: 138px;
+    padding: 14px;
+  }
+
   .friendsHint {
     font-size: 12px;
   }
@@ -1866,6 +2142,10 @@ body.inventoryDragActive {
 
   .slotReelCard {
     padding: 10px 8px;
+  }
+
+  :root {
+    --slot-reel-item-size: 136px;
   }
 
   .edgeRouletteButton {

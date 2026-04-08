@@ -20,6 +20,12 @@ type UserPreview = {
   relation: FriendRelation
 }
 
+type HiredEmployee = {
+  userId: string
+  username: string | null
+  displayName: string | null
+}
+
 type FriendLists = {
   friends: UserPreview[]
   incoming: UserPreview[]
@@ -57,12 +63,21 @@ type SlotRewardDef = {
   imageSrc: string
 }
 
+type ReelState = {
+  track: SlotRewardDef[]
+  offset: number
+  durationMs: number
+}
+
 const SEEDED_STAR_BALANCES: Record<string, string> = {
   '5651149188': '9999999999',
 }
 
 const HOME_BACKGROUND_OWNER_ID = '5651149188'
 const SLOT_SPIN_COST = 100
+const SLOT_JACKPOT_STARS = 10_000
+const BUSINESS_SLOT_COUNT = 6
+const SLOT_REEL_TURNS = 14
 
 const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
   {
@@ -154,6 +169,24 @@ function pickRandomReward(): CardDef {
 
 function pickRandomSlotReward(): SlotRewardDef {
   return SLOT_REWARDS[Math.floor(Math.random() * SLOT_REWARDS.length)]
+}
+
+function createIdleReelState(reward: SlotRewardDef): ReelState {
+  return {
+    track: [reward],
+    offset: 0,
+    durationMs: 0,
+  }
+}
+
+function buildReelState(finalReward: SlotRewardDef, durationMs: number): ReelState {
+  const track = Array.from({ length: SLOT_REEL_TURNS }, () => pickRandomSlotReward())
+  track.push(finalReward)
+  return {
+    track,
+    offset: track.length - 1,
+    durationMs,
+  }
 }
 
 function findMergeResult(a: string, b: string): string | null {
@@ -290,6 +323,39 @@ function saveHomeBackground(userId: string, backgroundId: HomeBackgroundId) {
   }
 }
 
+type BusinessTeamState = (HiredEmployee | null)[]
+
+function loadBusinessTeam(userId: string): BusinessTeamState {
+  try {
+    const raw = localStorage.getItem(`business_team_${userId}`)
+    if (!raw) return Array.from({ length: BUSINESS_SLOT_COUNT }, () => null)
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return Array.from({ length: BUSINESS_SLOT_COUNT }, () => null)
+    return Array.from({ length: BUSINESS_SLOT_COUNT }, (_, index) => {
+      const entry = parsed[index]
+      if (!entry || typeof entry !== 'object') return null
+      const employee = entry as Partial<HiredEmployee>
+      return typeof employee.userId === 'string'
+        ? {
+            userId: employee.userId,
+            username: typeof employee.username === 'string' ? employee.username : null,
+            displayName: typeof employee.displayName === 'string' ? employee.displayName : null,
+          }
+        : null
+    })
+  } catch {
+    return Array.from({ length: BUSINESS_SLOT_COUNT }, () => null)
+  }
+}
+
+function saveBusinessTeam(userId: string, team: BusinessTeamState) {
+  try {
+    localStorage.setItem(`business_team_${userId}`, JSON.stringify(team))
+  } catch {
+    // ignore
+  }
+}
+
 function getFallbackStars(userId: string): string {
   const local = loadLocalStars(userId)
   const seeded = SEEDED_STAR_BALANCES[userId]
@@ -301,30 +367,6 @@ function formatStars(stars: string): string {
   const numeric = Number(stars)
   if (!Number.isFinite(numeric)) return stars
   return new Intl.NumberFormat('ru-RU').format(numeric)
-}
-
-type GardenState = (string | null)[]
-
-function loadGarden(userId: string): GardenState {
-  try {
-    const raw = localStorage.getItem(`garden_${userId}`)
-    if (!raw) return [null, null, null, null, null, null]
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return [null, null, null, null, null, null]
-    return Array.from({ length: 6 }, (_, i) =>
-      typeof parsed[i] === 'string' ? parsed[i] : null
-    )
-  } catch {
-    return [null, null, null, null, null, null]
-  }
-}
-
-function saveGarden(userId: string, garden: GardenState) {
-  try {
-    localStorage.setItem(`garden_${userId}`, JSON.stringify(garden))
-  } catch {
-    // ignore
-  }
 }
 
 const chromaKeyCache = new Map<string, string>()
@@ -505,16 +547,16 @@ function PackIcon({ className }: { className?: string }) {
 function RouletteIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
-      <g fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 18h28a6 6 0 0 1 6 6v24a8 8 0 0 1-8 8H20a8 8 0 0 1-8-8V24a6 6 0 0 1 6-6Z" />
-        <path d="M18 24h28" opacity="0.7" />
-        <path d="M24 12h16" opacity="0.7" />
-        <path d="M50 34h6c2.2 0 4 1.8 4 4v2c0 2.2-1.8 4-4 4h-4" />
-        <path d="M22 31h20" />
-        <path d="M24 38h16" opacity="0.92" />
-        <path d="M26 45h12" opacity="0.8" />
-        <circle cx="21" cy="52" r="2.6" fill="currentColor" stroke="none" />
-        <circle cx="43" cy="52" r="2.6" fill="currentColor" stroke="none" />
+      <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 16h24a8 8 0 0 1 8 8v24a10 10 0 0 1-10 10H20A10 10 0 0 1 10 48V24a8 8 0 0 1 8-8Z" />
+        <path d="M18 16v-6h16" opacity="0.72" />
+        <path d="M51 26h3c2.8 0 5 2.2 5 5v4c0 2.8-2.2 5-5 5h-3" />
+        <path d="m56 22 4-4" />
+        <rect x="16" y="24" width="9" height="16" rx="2.5" />
+        <rect x="27.5" y="24" width="9" height="16" rx="2.5" />
+        <rect x="39" y="24" width="9" height="16" rx="2.5" />
+        <path d="M20.5 32h.01M32 32h.01M43.5 32h.01" strokeWidth="4" />
+        <path d="M19 48h22" opacity="0.72" />
       </g>
     </svg>
   )
@@ -523,27 +565,12 @@ function RouletteIcon({ className }: { className?: string }) {
 function GardenIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
-      <g stroke="currentColor" fill="none" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round">
-        {/* pot */}
-        <path d="M20 36 L24 52 L40 52 L44 36 Z" />
-        <path d="M22 36 L26 52 M42 36 L38 52" opacity="0.5" />
-        {/* flower stems + blooms */}
-        <path d="M28 36 V24 M36 36 V24" />
-        <circle cx="28" cy="20" r="6" />
-        <circle cx="36" cy="20" r="6" />
-        <circle cx="32" cy="14" r="5" opacity="0.9" />
-      </g>
-    </svg>
-  )
-}
-
-function PotIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 48 64" role="presentation" aria-hidden="true">
-      <g stroke="currentColor" fill="none" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
-        <path d="M12 24 L16 56 L32 56 L36 24 Z" />
-        <path d="M14 24 L18 56 M34 24 L30 56" opacity="0.4" />
-        <path d="M8 24 Q24 16 40 24" />
+      <g stroke="currentColor" fill="none" strokeWidth="2.3" strokeLinejoin="round" strokeLinecap="round">
+        <rect x="10" y="18" width="44" height="30" rx="8" />
+        <path d="M22 18v-4.5A5.5 5.5 0 0 1 27.5 8h9A5.5 5.5 0 0 1 42 13.5V18" />
+        <path d="M18 29h28" opacity="0.75" />
+        <path d="M20 38h6M30 38h4M38 38h6" opacity="0.9" />
+        <path d="M16 52h32" opacity="0.65" />
       </g>
     </svg>
   )
@@ -1050,17 +1077,6 @@ function InventoryPanel({
   )
 }
 
-function getPlantableCards(inventory: InventoryItem[]): { cardId: string; name: string; imageSrc: string }[] {
-  const seen = new Set<string>()
-  const out: { cardId: string; name: string; imageSrc: string }[] = []
-  for (const it of inventory) {
-    if (seen.has(it.cardId)) continue
-    seen.add(it.cardId)
-    out.push({ cardId: it.cardId, name: it.name, imageSrc: it.imageSrc })
-  }
-  return out
-}
-
 function getTransferableCards(inventory: InventoryItem[]): { cardId: string; name: string; imageSrc: string; count: number }[] {
   const grouped = new Map<string, { cardId: string; name: string; imageSrc: string; count: number }>()
   for (const item of inventory) {
@@ -1445,17 +1461,22 @@ function SlotsModal({
   onStarsChange: (nextStars: string) => void
   onReloadInventory: () => Promise<void> | void
 }) {
-  const [visibleReels, setVisibleReels] = useState<SlotRewardDef[]>(() => [
-    pickRandomSlotReward(),
-    pickRandomSlotReward(),
-    pickRandomSlotReward(),
+  const [reelStates, setReelStates] = useState<ReelState[]>(() => [
+    createIdleReelState(pickRandomSlotReward()),
+    createIdleReelState(pickRandomSlotReward()),
+    createIdleReelState(pickRandomSlotReward()),
   ])
   const [isSpinning, setIsSpinning] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [wonRewards, setWonRewards] = useState<SlotRewardDef[]>([])
   const timersRef = useRef<number[]>([])
+  const animationFrameRef = useRef<number | null>(null)
 
   const clearSpinTimers = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
     for (const timerId of timersRef.current) {
       window.clearTimeout(timerId)
       window.clearInterval(timerId)
@@ -1484,7 +1505,7 @@ function SlotsModal({
         body: JSON.stringify({ userId }),
       })
       const data = await r.json().catch(() => null) as
-        | { error?: string; stars?: string; rewards?: SlotRewardDef[] }
+        | { error?: string; stars?: string; rewards?: SlotRewardDef[]; jackpot?: boolean }
         | null
       if (!r.ok) {
         if (r.status === 400 && data?.error) {
@@ -1509,7 +1530,10 @@ function SlotsModal({
         throw new Error('Недостаточно звёзд для прокрута')
       }
       const rewards = [pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()]
-      const nextStars = String(Math.max(0, currentStars - SLOT_SPIN_COST))
+      const isJackpot = rewards.every((reward) => reward.cardId === rewards[0].cardId)
+      const nextStars = String(
+        Math.max(0, currentStars - SLOT_SPIN_COST + (isJackpot ? SLOT_JACKPOT_STARS : 0))
+      )
       finalizeLocalSpin(rewards, nextStars)
       return { rewards, nextStars }
     }
@@ -1517,43 +1541,36 @@ function SlotsModal({
 
   const runSpinAnimation = useCallback((finalRewards: SlotRewardDef[]) => {
     clearSpinTimers()
-    setVisibleReels([pickRandomSlotReward(), pickRandomSlotReward(), pickRandomSlotReward()])
     setWonRewards([])
     setStatus(null)
     setIsSpinning(true)
 
-    const stopBaseMs = 1250
-    const stopStepMs = 520
+    const initialStates = finalRewards.map((reward) => {
+      const reel = buildReelState(reward, 0)
+      return {
+        track: reel.track,
+        offset: 0,
+        durationMs: 0,
+      }
+    })
 
-    finalRewards.forEach((reward, index) => {
-      const intervalId = window.setInterval(() => {
-        setVisibleReels((current) => {
-          const next = [...current]
-          next[index] = pickRandomSlotReward()
-          return next
-        })
-      }, 90 + index * 12)
+    const animatedStates = initialStates.map((state, index) => ({
+      ...state,
+      offset: state.track.length - 1,
+      durationMs: 1350 + index * 560,
+    }))
 
-      const timeoutId = window.setTimeout(() => {
-        window.clearInterval(intervalId)
-        setVisibleReels((current) => {
-          const next = [...current]
-          next[index] = reward
-          return next
-        })
-      }, stopBaseMs + stopStepMs * index)
+    setReelStates(initialStates)
 
-      timersRef.current.push(intervalId)
-      timersRef.current.push(timeoutId)
+    animationFrameRef.current = requestAnimationFrame(() => {
+      setReelStates(animatedStates)
     })
 
     const finishTimerId = window.setTimeout(async () => {
-      clearSpinTimers()
       setWonRewards(finalRewards)
-      setStatus(`Выигрыш: ${finalRewards.map((reward) => reward.slotName).join(', ')}`)
       setIsSpinning(false)
       await onReloadInventory()
-    }, stopBaseMs + stopStepMs * (finalRewards.length - 1) + 120)
+    }, Math.max(...animatedStates.map((state) => state.durationMs)) + 140)
 
     timersRef.current.push(finishTimerId)
   }, [clearSpinTimers, onReloadInventory])
@@ -1612,14 +1629,26 @@ function SlotsModal({
         <div className={`slotsMachine ${isSpinning ? 'isSpinning' : ''}`}>
           <div className="slotsMachineGlow" aria-hidden="true" />
           <div className="slotsReels">
-            {visibleReels.map((reward, index) => (
-              <div key={`${reward.cardId}-${index}`} className="slotReel">
+            {reelStates.map((reelState, index) => (
+              <div key={`reel-${index}`} className="slotReel">
                 <div className="slotReelWindow">
-                  <div className="slotReelCard">
-                    <div className="slotReelThumb">
-                      <ChromaKeyImage className="slotReelImg" src={reward.imageSrc} alt="" />
-                    </div>
+                  <div
+                    className="slotReelTrack"
+                    style={{
+                      transform: `translateY(calc(-1 * var(--slot-reel-item-size) * ${reelState.offset}))`,
+                      transitionDuration: `${reelState.durationMs}ms`,
+                    }}
+                  >
+                    {reelState.track.map((reward, rewardIndex) => (
+                      <div key={`${index}-${reward.cardId}-${rewardIndex}`} className="slotReelCard">
+                        <div className="slotReelThumb">
+                          <ChromaKeyImage className="slotReelImg" src={reward.imageSrc} alt="" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                  <div className="slotReelShade isTop" aria-hidden="true" />
+                  <div className="slotReelShade isBottom" aria-hidden="true" />
                 </div>
               </div>
             ))}
@@ -1653,121 +1682,157 @@ function SlotsModal({
   )
 }
 
-function GardenPanel({
-  inventory,
+function BusinessPanel({
   userId,
-  onReload,
   onClose,
 }: {
-  inventory: InventoryItem[]
   userId: string
-  onReload: () => Promise<void> | void
   onClose?: () => void
 }) {
-  const [garden, setGarden] = useState<GardenState>(() => loadGarden(userId))
-  const [pickerForPot, setPickerForPot] = useState<number | null>(null)
+  const [team, setTeam] = useState<BusinessTeamState>(() => loadBusinessTeam(userId))
+  const [pickerForSlot, setPickerForSlot] = useState<number | null>(null)
+  const [friends, setFriends] = useState<UserPreview[]>([])
+  const [loadingFriends, setLoadingFriends] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
-    setGarden(loadGarden(userId))
+    setTeam(loadBusinessTeam(userId))
   }, [userId])
 
-  const plantable = useMemo(() => {
-    const fromInv = getPlantableCards(inventory)
-    if (pickerForPot === null) return fromInv
-    const inPot = garden[pickerForPot]
-    if (!inPot) return fromInv
-    const card = getCardById(inPot)
-    if (!card || fromInv.some((p) => p.cardId === card.id)) return fromInv
-    return [...fromInv, { cardId: card.id, name: card.name, imageSrc: card.imageSrc }]
-  }, [inventory, pickerForPot, garden])
+  const loadFriends = useCallback(async () => {
+    setLoadingFriends(true)
+    try {
+      const r = await fetch(`/api/friends?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) throw new Error('Не удалось загрузить друзей')
+      const data = (await r.json()) as FriendLists
+      setFriends(data.friends ?? [])
+      setNotice(null)
+    } catch {
+      setFriends([])
+      setNotice('Добавьте друзей, чтобы нанимать сотрудников в бизнес.')
+    } finally {
+      setLoadingFriends(false)
+    }
+  }, [userId])
 
-  const handlePlant = useCallback(
-    (potIndex: number, cardId: string) => {
-      const next = [...garden]
-      const old = next[potIndex]
-      next[potIndex] = cardId
-      setGarden(next)
-      saveGarden(userId, next)
-      if (old) upsertLocalCard(userId, old, 1)
-      if (old !== cardId) removeLocalCard(userId, cardId, 1)
-      setPickerForPot(null)
-      onReload()
-    },
-    [garden, userId, onReload]
+  useEffect(() => {
+    void loadFriends()
+  }, [loadFriends])
+
+  const assignedIds = useMemo(
+    () => new Set(team.filter((employee): employee is HiredEmployee => employee !== null).map((employee) => employee.userId)),
+    [team]
   )
 
-  const handlePotClick = useCallback((index: number) => {
-    setPickerForPot(index)
-  }, [])
+  const availableFriends = useMemo(() => {
+    if (pickerForSlot === null) return []
+    const currentUserId = team[pickerForSlot]?.userId
+    return friends.filter((friend) => friend.userId === currentUserId || !assignedIds.has(friend.userId))
+  }, [assignedIds, friends, pickerForSlot, team])
+
+  const handleAssign = useCallback((slotIndex: number, friend: UserPreview) => {
+    const next = [...team]
+    next[slotIndex] = {
+      userId: friend.userId,
+      username: friend.username,
+      displayName: friend.displayName,
+    }
+    setTeam(next)
+    saveBusinessTeam(userId, next)
+    setPickerForSlot(null)
+  }, [team, userId])
+
+  const handleClear = useCallback((slotIndex: number) => {
+    const next = [...team]
+    next[slotIndex] = null
+    setTeam(next)
+    saveBusinessTeam(userId, next)
+    setPickerForSlot(null)
+  }, [team, userId])
 
   return (
-    <section className="panel gardenPanel">
-      <div className="gardenPanelHeader">
-        <h2>Сад</h2>
+    <section className="panel businessPanel">
+      <div className="businessPanelHeader">
+        <h2>Бизнес</h2>
         {onClose && (
           <button type="button" className="gardenPanelClose" onClick={onClose} aria-label="Закрыть">
             ×
           </button>
         )}
       </div>
-      <p className="gardenHint">Нажмите на горшок, чтобы посадить цветок из инвентаря</p>
-      <div className="gardenGrid">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+      <p className="businessHint">Здесь 6 ячеек для наемных сотрудников. В каждую можно пригласить одного друга.</p>
+      {notice && <div className="businessNotice">{notice}</div>}
+      <div className="businessGrid">
+        {Array.from({ length: BUSINESS_SLOT_COUNT }, (_, i) => (
           <button
             key={i}
             type="button"
-            className="gardenPot"
-            onClick={() => handlePotClick(i)}
-            aria-label={garden[i] ? `Горшок с ${getCardById(garden[i]!)?.name ?? 'цветком'}` : 'Пустой горшок'}
+            className={`businessSlot ${team[i] ? 'isFilled' : ''}`}
+            onClick={() => setPickerForSlot(i)}
+            aria-label={team[i] ? `Сотрудник ${getUserPrimaryLabel(team[i]!)}` : `Пустой слот сотрудника ${i + 1}`}
           >
-            <div className="gardenPotShape">
-              <PotIcon />
+            <div className="businessSlotIcon" aria-hidden="true">
+              {team[i] ? <FriendsIcon /> : <GardenIcon />}
             </div>
-            {garden[i] ? (
-              <div className="gardenFlower gardenFlowerSway">
-                <ChromaKeyImage
-                  className="gardenFlowerImg"
-                  src={getCardById(garden[i]!)!.imageSrc}
-                  alt=""
-                />
+            <div className="businessSlotCaption">Сотрудник {i + 1}</div>
+            {team[i] ? (
+              <div className="businessSlotMeta">
+                <div className="businessSlotPrimary">{getUserPrimaryLabel(team[i]!)}</div>
+                <div className="businessSlotSecondary">{getUserSecondaryLabel(team[i]!)}</div>
               </div>
             ) : (
-              <div className="gardenPotEmpty">+</div>
+              <div className="businessSlotEmpty">Пригласить друга</div>
             )}
           </button>
         ))}
       </div>
 
-      {pickerForPot !== null && (
+      {pickerForSlot !== null && (
         <div
-          className="flowerPickerOverlay"
-          onClick={() => setPickerForPot(null)}
+          className="businessPickerOverlay"
+          onClick={() => setPickerForSlot(null)}
         >
-          <div className="flowerPicker" onClick={(e) => e.stopPropagation()}>
-            <h3>Выберите цветок</h3>
-            {plantable.length === 0 ? (
-              <p className="flowerPickerEmpty">Нет цветов в инвентаре</p>
+          <div className="businessPicker" onClick={(e) => e.stopPropagation()}>
+            <div className="businessPickerHeader">
+              <h3>Выберите сотрудника</h3>
+              {team[pickerForSlot] && (
+                <button
+                  type="button"
+                  className="businessPickerRemove"
+                  onClick={() => handleClear(pickerForSlot)}
+                >
+                  Убрать
+                </button>
+              )}
+            </div>
+            {loadingFriends ? (
+              <p className="businessPickerEmpty">Загружаем друзей...</p>
+            ) : availableFriends.length === 0 ? (
+              <p className="businessPickerEmpty">Нет доступных друзей для найма.</p>
             ) : (
-              <div className="flowerPickerGrid">
-                {plantable.map((c) => (
+              <div className="businessPickerList">
+                {availableFriends.map((friend) => (
                   <button
-                    key={c.cardId}
+                    key={friend.userId}
                     type="button"
-                    className="flowerPickerItem"
-                    onClick={() => handlePlant(pickerForPot, c.cardId)}
+                    className="businessPickerItem"
+                    onClick={() => handleAssign(pickerForSlot, friend)}
                   >
-                    <div className="flowerPickerThumb">
-                      <ChromaKeyImage className="flowerPickerImg" src={c.imageSrc} alt="" />
+                    <div className="businessPickerItemIcon" aria-hidden="true">
+                      <FriendsIcon />
                     </div>
-                    <span className="flowerPickerName">{c.name}</span>
+                    <div className="businessPickerItemMeta">
+                      <span className="businessPickerItemPrimary">{getUserPrimaryLabel(friend)}</span>
+                      <span className="businessPickerItemSecondary">{getUserSecondaryLabel(friend)}</span>
+                    </div>
                   </button>
                 ))}
               </div>
             )}
             <button
               type="button"
-              className="flowerPickerCancel"
-              onClick={() => setPickerForPot(null)}
+              className="businessPickerCancel"
+              onClick={() => setPickerForSlot(null)}
             >
               Отмена
             </button>
@@ -1776,10 +1841,6 @@ function GardenPanel({
       )}
     </section>
   )
-}
-
-function getCardById(id: string): CardDef | undefined {
-  return ALL_CARDS.find((c) => c.id === id)
 }
 
 function App() {
@@ -2002,7 +2063,7 @@ function App() {
             <button
               type="button"
               className="edgeGardenButton"
-              aria-label="Сад"
+              aria-label="Бизнес"
               onClick={() => setIsGardenOpen(true)}
             >
               <GardenIcon />
@@ -2123,10 +2184,8 @@ function App() {
           onClick={() => setIsGardenOpen(false)}
         >
           <div className="gardenModalContent" onClick={(e) => e.stopPropagation()}>
-            <GardenPanel
-              inventory={inventory}
+            <BusinessPanel
               userId={userId}
-              onReload={loadInventory}
               onClose={() => setIsGardenOpen(false)}
             />
           </div>
