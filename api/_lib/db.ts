@@ -4,9 +4,18 @@ const BONUS_USER_ID = '5651149188'
 const BONUS_STARS = 9_999_999_999
 const BONUS_SEED_VERSION = 1
 const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
-const STARTER_INVENTORY_CARD_ID = 'asset_apartment'
-const INVENTORY_RESET_VERSION = 1
+const INVENTORY_RESET_VERSION = 2
 const BUSINESS_SLOT_COUNT = 6
+const LEGACY_PACK_CARD_IDS = [
+  'rose_red',
+  'rose_white',
+  'knife_kitchen',
+  'log',
+  'axe_noir',
+  'axe',
+  'rose_2red',
+  'rose_bouquet',
+] as const
 
 type SqlRunner = typeof sql
 let schemaReadyPromise: Promise<void> | null = null
@@ -136,15 +145,6 @@ async function seedSearchableUsers(query: SqlRunner) {
   }
 }
 
-async function seedStarterInventoryForUser(userId: string) {
-  await sql`
-    insert into inventory (user_id, card_id, qty)
-    values (${userId}, ${STARTER_INVENTORY_CARD_ID}, 1)
-    on conflict (user_id, card_id)
-    do update set qty = greatest(inventory.qty, excluded.qty);
-  `
-}
-
 async function resetInventoryIfNeeded(query: SqlRunner) {
   const { rows } = await query<{ value: string }>`
     select value
@@ -156,14 +156,18 @@ async function resetInventoryIfNeeded(query: SqlRunner) {
   const currentVersion = Number(rows[0]?.value ?? '0')
   if (currentVersion >= INVENTORY_RESET_VERSION) return
 
-  await query`delete from inventory;`
-
   await query`
-    insert into inventory (user_id, card_id, qty)
-    select tg_user_id, ${STARTER_INVENTORY_CARD_ID}, 1
-    from users
-    on conflict (user_id, card_id)
-    do update set qty = excluded.qty;
+    delete from inventory
+    where card_id in (
+      ${LEGACY_PACK_CARD_IDS[0]},
+      ${LEGACY_PACK_CARD_IDS[1]},
+      ${LEGACY_PACK_CARD_IDS[2]},
+      ${LEGACY_PACK_CARD_IDS[3]},
+      ${LEGACY_PACK_CARD_IDS[4]},
+      ${LEGACY_PACK_CARD_IDS[5]},
+      ${LEGACY_PACK_CARD_IDS[6]},
+      ${LEGACY_PACK_CARD_IDS[7]}
+    );
   `
 
   await query`
@@ -191,6 +195,7 @@ async function ensureSchemaOnce() {
 
   await query`alter table users add column if not exists username text;`
   await query`alter table users add column if not exists display_name text;`
+  await query`alter table users add column if not exists last_pack_opened_at timestamptz;`
 
   await query`
     create table if not exists cards (
@@ -308,7 +313,6 @@ export async function ensureSchema() {
 
 export async function ensureUser(userId: string) {
   await upsertUserProfile({ userId })
-  await seedStarterInventoryForUser(userId)
 }
 
 export async function upsertUserProfile(input: UserProfileInput) {

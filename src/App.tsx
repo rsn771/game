@@ -119,6 +119,26 @@ type FriendProfileState = {
   hasApartment: boolean
 }
 
+type PackRewardResult =
+  | {
+      kind: 'stars'
+      title: string
+      subtitle: string
+      starsAwarded: number
+    }
+  | {
+      kind: 'item'
+      title: string
+      subtitle: string
+      cardId: string
+      imageSrc: string
+    }
+  | {
+      kind: 'empty'
+      title: string
+      subtitle: string
+    }
+
 type CustomizeCategoryId = 'pose' | 'headwear' | 'build' | 'hair' | 'face' | 'item'
 
 type CustomizeCategoryDef = {
@@ -146,11 +166,12 @@ const BUSINESS_CLICK_DOUBLE_THRESHOLD = 150_000
 const BUSINESS_EMPLOYEE_CLICK_STARS = 5
 const BUSINESS_OWNER_CLICK_STARS = 1
 const BUSINESS_CAPITAL_CLICK_STARS = 1
+const PACK_COOLDOWN_MS = 12 * 60 * 60 * 1000
 const SLOT_SPIN_COST = 100
 const SLOT_JACKPOT_STARS = 10_000
 const BUSINESS_SLOT_COUNT = 6
 const SLOT_REEL_TURNS = 14
-const LOCAL_INVENTORY_RESET_VERSION = 1
+const LOCAL_INVENTORY_RESET_VERSION = 2
 const DEFAULT_BUSINESS_ROLES = [
   'Управляющий',
   'Консультант',
@@ -158,6 +179,16 @@ const DEFAULT_BUSINESS_ROLES = [
   'Маркетолог',
   'Логист',
   'Ассистент',
+] as const
+const LEGACY_PACK_CARD_IDS = [
+  'rose_red',
+  'rose_white',
+  'knife_kitchen',
+  'log',
+  'axe_noir',
+  'axe',
+  'rose_2red',
+  'rose_bouquet',
 ] as const
 
 const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
@@ -243,10 +274,6 @@ const MERGE_RESULTS: Record<string, string> = {
   'rose_red|rose_red': 'rose_2red',
   'rose_red|rose_2red': 'rose_bouquet',
   'rose_2red|rose_red': 'rose_bouquet',
-}
-
-function pickRandomReward(): CardDef {
-  return PACK_CARDS[Math.floor(Math.random() * PACK_CARDS.length)]
 }
 
 function pickRandomSlotReward(): SlotRewardDef {
@@ -394,22 +421,89 @@ function saveLocalStars(userId: string, stars: string) {
   }
 }
 
+function loadLocalPackNextOpenAt(userId: string): number | null {
+  try {
+    const raw = localStorage.getItem(`pack_next_open_at_${userId}`)
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function saveLocalPackNextOpenAt(userId: string, nextOpenAt: number | null) {
+  try {
+    if (!nextOpenAt) {
+      localStorage.removeItem(`pack_next_open_at_${userId}`)
+      return
+    }
+    localStorage.setItem(`pack_next_open_at_${userId}`, String(nextOpenAt))
+  } catch {
+    // ignore
+  }
+}
+
+function pickLocalPackReward(): PackRewardResult {
+  const roll = Math.random() * 100
+
+  if (roll < 40) {
+    return {
+      kind: 'stars',
+      title: '+10 звёзд',
+      subtitle: 'На баланс',
+      starsAwarded: 10,
+    }
+  }
+
+  if (roll < 80) {
+    return {
+      kind: 'stars',
+      title: '+100 звёзд',
+      subtitle: 'На баланс',
+      starsAwarded: 100,
+    }
+  }
+
+  if (roll < 90) {
+    return {
+      kind: 'item',
+      title: 'Квартира',
+      subtitle: 'Новый предмет',
+      cardId: APARTMENT_CARD_ID,
+      imageSrc: '/home-bg-apartment-sunrise.svg',
+    }
+  }
+
+  // Requested chances add up to 90%, so the remaining 10% stays as an empty pack.
+  return {
+    kind: 'empty',
+    title: 'Пусто',
+    subtitle: 'В этот раз без награды',
+  }
+}
+
 function ensureLocalInventoryMigration(userId: string) {
   try {
     const versionKey = `inventory_reset_version_${userId}`
     const currentVersion = Number(localStorage.getItem(versionKey) ?? '0')
-    if (currentVersion >= LOCAL_INVENTORY_RESET_VERSION) {
-      const current = loadLocalInventory(userId)
-      if (!current[APARTMENT_CARD_ID]) {
-        current[APARTMENT_CARD_ID] = 1
-        saveLocalInventory(userId, current)
+    const current = loadLocalInventory(userId)
+    let changed = false
+
+    for (const cardId of LEGACY_PACK_CARD_IDS) {
+      if (current[cardId]) {
+        delete current[cardId]
+        changed = true
       }
-      return
     }
-    saveLocalInventory(userId, { [APARTMENT_CARD_ID]: 1 })
+
+    if (changed || currentVersion < LOCAL_INVENTORY_RESET_VERSION) {
+      saveLocalInventory(userId, current)
+    }
+
     localStorage.setItem(versionKey, String(LOCAL_INVENTORY_RESET_VERSION))
   } catch {
-    saveLocalInventory(userId, { [APARTMENT_CARD_ID]: 1 })
+    saveLocalInventory(userId, {})
   }
 }
 
@@ -642,6 +736,16 @@ function formatStars(stars: string): string {
   const numeric = Number(stars)
   if (!Number.isFinite(numeric)) return stars
   return new Intl.NumberFormat('ru-RU').format(numeric)
+}
+
+function formatCountdown(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return [hours, minutes, seconds]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':')
 }
 
 function getEmployeeBusinessClickReward(currentCapital: string | number) {
@@ -3221,7 +3325,12 @@ function App() {
   const [isExploding, setIsExploding] = useState(false)
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [didRewardThisOpen, setDidRewardThisOpen] = useState(false)
-  const [rewardCard, setRewardCard] = useState<CardDef | null>(null)
+  const [rewardCard, setRewardCard] = useState<PackRewardResult | null>(null)
+  const [packNextOpenAt, setPackNextOpenAt] = useState<number | null>(() => loadLocalPackNextOpenAt(userId))
+  const [packStatusLoading, setPackStatusLoading] = useState(false)
+  const [packOpening, setPackOpening] = useState(false)
+  const [packNotice, setPackNotice] = useState<string | null>(null)
+  const [packNow, setPackNow] = useState(() => Date.now())
   const [stars, setStars] = useState('0')
   const [businessMode, setBusinessMode] = useState<BusinessMode>('none')
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(() => loadLocalBusiness(userId))
@@ -3287,6 +3396,7 @@ function App() {
     setBusinessProfile(loadLocalBusiness(userId))
     setBusinessMode(loadLocalBusiness(userId) ? 'owner' : 'none')
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
+    setPackNextOpenAt(loadLocalPackNextOpenAt(userId))
   }, [userId])
 
   useEffect(() => {
@@ -3418,12 +3528,135 @@ function App() {
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
   }, [userId])
 
+  const packRemainingMs = packNextOpenAt ? Math.max(0, packNextOpenAt - packNow) : 0
+  const isPackReady = packRemainingMs === 0
+
+  const syncPackStatus = useCallback(async () => {
+    setPackStatusLoading(true)
+    try {
+      const r = await fetchWithTimeout(`/api/pack?userId=${encodeURIComponent(userId)}`)
+      const data = await r.json().catch(() => null) as { stars?: string; nextOpenAt?: number | null } | null
+      if (!r.ok) throw new Error('pack-status')
+
+      const nextOpenAt = typeof data?.nextOpenAt === 'number' ? data.nextOpenAt : null
+      setPackNextOpenAt(nextOpenAt)
+      saveLocalPackNextOpenAt(userId, nextOpenAt)
+      if (typeof data?.stars === 'string') {
+        setStars(data.stars)
+        saveLocalStars(userId, data.stars)
+      }
+    } catch {
+      const nextOpenAt = loadLocalPackNextOpenAt(userId)
+      setPackNextOpenAt(nextOpenAt)
+    } finally {
+      setPackStatusLoading(false)
+    }
+  }, [userId])
+
+  const openPack = useCallback(async () => {
+    if (packOpening || !isPackReady) return
+
+    setPackOpening(true)
+    setPackNotice(null)
+
+    try {
+      const r = await fetchWithTimeout('/api/pack', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await r.json().catch(() => null) as {
+        error?: string
+        stars?: string
+        nextOpenAt?: number | null
+        reward?: PackRewardResult
+      } | null
+
+      if (!r.ok) {
+        if (typeof data?.nextOpenAt === 'number') {
+          setPackNextOpenAt(data.nextOpenAt)
+          saveLocalPackNextOpenAt(userId, data.nextOpenAt)
+          setPackNow(Date.now())
+          setPackNotice('Стикерпак ещё на перезарядке')
+          if (typeof data?.stars === 'string') {
+            setStars(data.stars)
+            saveLocalStars(userId, data.stars)
+          }
+          return
+        }
+        throw new Error(data?.error ?? 'pack-open')
+      }
+
+      const nextOpenAt = typeof data?.nextOpenAt === 'number' ? data.nextOpenAt : Date.now() + PACK_COOLDOWN_MS
+      const reward = data?.reward ?? {
+        kind: 'empty',
+        title: 'Пусто',
+        subtitle: 'В этот раз без награды',
+      } satisfies PackRewardResult
+
+      setRewardCard(reward)
+      setPackNextOpenAt(nextOpenAt)
+      setPackNow(Date.now())
+      saveLocalPackNextOpenAt(userId, nextOpenAt)
+
+      if (typeof data?.stars === 'string') {
+        setStars(data.stars)
+        saveLocalStars(userId, data.stars)
+      }
+
+      if (reward.kind === 'item') {
+        await loadInventory()
+      }
+    } catch {
+      const localNextOpenAt = loadLocalPackNextOpenAt(userId)
+      if (localNextOpenAt && localNextOpenAt > Date.now()) {
+        setPackNextOpenAt(localNextOpenAt)
+        setPackNow(Date.now())
+        setPackNotice('Стикерпак ещё на перезарядке')
+        return
+      }
+
+      const reward = pickLocalPackReward()
+      const nextOpenAt = Date.now() + PACK_COOLDOWN_MS
+      setRewardCard(reward)
+      setPackNextOpenAt(nextOpenAt)
+      setPackNow(Date.now())
+      saveLocalPackNextOpenAt(userId, nextOpenAt)
+
+      if (reward.kind === 'stars') {
+        const nextStars = String(Math.max(0, Number(stars) + reward.starsAwarded))
+        setStars(nextStars)
+        saveLocalStars(userId, nextStars)
+      } else if (reward.kind === 'item') {
+        upsertLocalCard(userId, reward.cardId, 1)
+        await loadInventory()
+      }
+    } finally {
+      setPackOpening(false)
+    }
+  }, [isPackReady, loadInventory, packOpening, stars, userId])
+
+  useEffect(() => {
+    if (!isPackOpen) return
+    setPackNow(Date.now())
+    void syncPackStatus()
+  }, [isPackOpen, syncPackStatus])
+
+  useEffect(() => {
+    if (!isPackOpen || !packNextOpenAt || packNextOpenAt <= Date.now()) return
+    const intervalId = window.setInterval(() => {
+      setPackNow(Date.now())
+    }, 1000)
+    return () => window.clearInterval(intervalId)
+  }, [isPackOpen, packNextOpenAt])
+
   useEffect(() => {
     if (!isPackOpen) {
       setPackClicks(0)
       setIsExploding(false)
       setDidRewardThisOpen(false)
       setRewardCard(null)
+      setPackNotice(null)
       return
     }
     if (packClicks === 2) {
@@ -3438,17 +3671,8 @@ function App() {
     if (packClicks < 2) return
     if (didRewardThisOpen) return
     setDidRewardThisOpen(true)
-    const card = pickRandomReward()
-    setRewardCard(card)
-    upsertLocalCard(userId, card.id, 1)
-    fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId, cardId: card.id, qty: 1 }),
-    })
-      .then(() => loadInventory())
-      .catch(() => {})
-  }, [didRewardThisOpen, isPackOpen, packClicks])
+    void openPack()
+  }, [didRewardThisOpen, isPackOpen, openPack, packClicks])
 
   const [isGardenOpen, setIsGardenOpen] = useState(false)
 
@@ -3619,13 +3843,23 @@ function App() {
           className="packModalOverlay"
           role="presentation"
           onClick={() => {
-            if (packClicks >= 2 && !isExploding) {
-              setIsPackOpen(false)
-              setTab('home')
-            }
+            setIsPackOpen(false)
+            setTab('home')
           }}
         >
-          <div className="packStage" role="dialog" aria-modal="true" aria-label="Стикерпак">
+          <div className="packStage" role="dialog" aria-modal="true" aria-label="Стикерпак" onClick={(e) => e.stopPropagation()}>
+            <div className="packHeader">
+              <h3>Стикерпак</h3>
+              <p className="packHint">
+                {rewardCard
+                  ? 'Следующее открытие будет доступно после перезарядки.'
+                  : isPackReady
+                    ? 'Можно вскрыть сейчас. Новый пак открывается раз в 12 часов.'
+                    : `Следующее вскрытие через ${formatCountdown(packRemainingMs)}.`}
+              </p>
+              <p className="packHint isMuted">Награды: +10 звёзд, +100 звёзд или квартира.</p>
+            </div>
+
             {packClicks < 2 || isExploding ? (
               <button
                 type="button"
@@ -3634,12 +3868,13 @@ function App() {
                     ? 'packInteractive packExplode'
                     : packClicks > 0
                       ? 'packInteractive packShake2'
-                      : 'packInteractive'
+                      : `packInteractive ${(!isPackReady || packStatusLoading || packOpening) ? 'isLocked' : ''}`
                 }
                 aria-label="Открыть пакетик"
+                disabled={!isPackReady || packStatusLoading || packOpening}
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (isExploding) return
+                  if (isExploding || !isPackReady || packStatusLoading || packOpening) return
                   setPackClicks((c) => Math.min(2, c + 1))
                 }}
               >
@@ -3655,11 +3890,24 @@ function App() {
             ) : rewardCard ? (
               <div className="rewardCard" aria-label="Карточка" onClick={(e) => e.stopPropagation()}>
                 <div className="rewardIconFrame" aria-hidden="true">
-                  <ChromaKeyImage className="rewardIcon" src={rewardCard.imageSrc} alt={rewardCard.name} />
+                  {rewardCard.kind === 'item' ? (
+                    <ChromaKeyImage className="rewardIcon" src={rewardCard.imageSrc} alt={rewardCard.title} />
+                  ) : rewardCard.kind === 'stars' ? (
+                    <StarsIcon className="rewardVectorIcon" />
+                  ) : (
+                    <PackIcon className="rewardVectorIcon" />
+                  )}
                 </div>
-                <div className="rewardName">{rewardCard.name}</div>
+                <div className="rewardName">{rewardCard.title}</div>
+                <div className="rewardSubtext">{rewardCard.subtitle}</div>
               </div>
-            ) : null}
+            ) : (
+              <div className="rewardCard isLoading" aria-live="polite">
+                <div className="rewardName">{packOpening ? 'Открываем...' : 'Готовим пак...'}</div>
+              </div>
+            )}
+
+            {packNotice && <div className="packNotice">{packNotice}</div>}
           </div>
         </div>
       )}

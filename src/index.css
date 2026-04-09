@@ -2359,6 +2359,32 @@ body {
   place-items: center;
   width: min(92vw, 520px);
   padding: 24px;
+  gap: 16px;
+}
+
+.packHeader {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  text-align: center;
+}
+
+.packHeader h3 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 0.02em;
+}
+
+.packHint {
+  margin: 0;
+  max-width: 360px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.packHint.isMuted {
+  color: var(--muted);
 }
 
 .packInteractive {
@@ -2370,6 +2396,16 @@ body {
   position: relative;
   cursor: pointer;
   color: var(--fg);
+}
+
+.packInteractive.isLocked {
+  cursor: not-allowed;
+}
+
+.packInteractive.isLocked .packGlowIcon {
+  opacity: 0.42;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.12));
+  animation: none;
 }
 
 .packInteractive:focus-visible {
@@ -2555,6 +2591,11 @@ body {
   padding: 18px;
 }
 
+.rewardCard.isLoading {
+  place-items: center;
+  text-align: center;
+}
+
 .rewardIconFrame {
   width: 80%;
   aspect-ratio: 1 / 1;
@@ -2574,12 +2615,32 @@ body {
   border-radius: 16px;
 }
 
+.rewardVectorIcon {
+  width: 62%;
+  height: 62%;
+  color: rgba(255, 255, 255, 0.96);
+}
+
 .rewardName {
   text-align: center;
   font-size: 16px;
   font-weight: 650;
   letter-spacing: 0.2px;
   color: rgba(255, 255, 255, 0.92);
+}
+
+.rewardSubtext {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.packNotice {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .slotsModalOverlay {
