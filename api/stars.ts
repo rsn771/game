@@ -14,7 +14,7 @@ export const config = {
 
 const BUSINESS_CAPITAL_DOUBLE_THRESHOLD = 150_000
 const EMPLOYEE_CLICK_STARS = 5
-const OWNER_CLICK_STARS = 3
+const OWNER_CLICK_STARS = 1
 const BUSINESS_CLICK_CAPITAL = 1
 
 type StarResponse = {

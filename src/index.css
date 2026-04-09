@@ -23,6 +23,197 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+.friendRow.isClickable {
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.friendRow.isClickable:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.friendRow.isClickable:active {
+  transform: translateY(1px);
+}
+
+.friendProfileOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(12px);
+}
+
+.friendProfileModal {
+  width: min(94vw, 440px);
+  max-height: min(88dvh, 860px);
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 44%),
+    rgba(6, 6, 6, 0.96);
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.48);
+  padding: 18px;
+}
+
+.friendProfileHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.friendProfileHeader h3 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.friendProfileHint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.friendProfileStage {
+  position: relative;
+  min-height: 320px;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 50% 15%, rgba(255, 255, 255, 0.08), transparent 36%),
+    linear-gradient(180deg, #0d0d0d, #020202 72%);
+}
+
+.friendProfileStage.hasBackground {
+  background: #060606;
+}
+
+.friendProfileBackdrop,
+.friendProfileBackdropShade {
+  position: absolute;
+  inset: 0;
+}
+
+.friendProfileBackdrop {
+  background-size: cover;
+  background-position: center;
+  opacity: 0.92;
+}
+
+.friendProfileBackdropShade {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.52) 56%, rgba(0, 0, 0, 0.72)),
+    radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.1) 56%, rgba(0, 0, 0, 0.36) 100%);
+}
+
+.friendProfileAvatarWrap {
+  position: relative;
+  z-index: 1;
+  min-height: 320px;
+  display: grid;
+  place-items: end center;
+  padding: 28px 18px 0;
+}
+
+.friendProfileAvatarWrap .stickman {
+  width: min(54vw, 220px);
+  max-width: 220px;
+}
+
+.friendProfileSummary {
+  display: grid;
+  gap: 4px;
+}
+
+.friendProfileEyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.friendProfileName {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.friendProfileSecondary {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.friendProfileGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.friendProfileCard {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.friendProfileCard.isWide {
+  grid-column: 1 / -1;
+}
+
+.friendProfileLabel {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.friendProfileValue {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.friendProfileSubvalue {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+@media (max-width: 640px) {
+  .friendProfileModal {
+    width: min(96vw, 420px);
+    padding: 16px;
+    border-radius: 24px;
+  }
+
+  .friendProfileStage,
+  .friendProfileAvatarWrap {
+    min-height: 286px;
+  }
+
+  .friendProfileGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .friendProfileCard.isWide {
+    grid-column: auto;
+  }
+
+  .friendProfileName {
+    font-size: 24px;
+  }
+}
+
 html,
 body,
 #root {

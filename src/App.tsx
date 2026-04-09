@@ -105,6 +105,20 @@ type BusinessPayload = {
   assignment: BusinessAssignment | null
 }
 
+type PublicUserProfile = {
+  userId: string
+  username: string | null
+  displayName: string | null
+  stars: string
+}
+
+type FriendProfileState = {
+  preview: UserPreview
+  profile: PublicUserProfile | null
+  business: BusinessPayload | null
+  hasApartment: boolean
+}
+
 type CustomizeCategoryId = 'pose' | 'headwear' | 'build' | 'hair' | 'face' | 'item'
 
 type CustomizeCategoryDef = {
@@ -130,7 +144,7 @@ const BUSINESS_OPEN_COST = 100_000
 const BUSINESS_START_CAPITAL = 80_000
 const BUSINESS_CLICK_DOUBLE_THRESHOLD = 150_000
 const BUSINESS_EMPLOYEE_CLICK_STARS = 5
-const BUSINESS_OWNER_CLICK_STARS = 3
+const BUSINESS_OWNER_CLICK_STARS = 1
 const BUSINESS_CAPITAL_CLICK_STARS = 1
 const SLOT_SPIN_COST = 100
 const SLOT_JACKPOT_STARS = 10_000
@@ -308,6 +322,21 @@ function getUserPrimaryLabel(user: { userId: string | null; username: string | n
 function getUserSecondaryLabel(user: { userId: string | null; username: string | null; displayName: string | null }) {
   if (user.username && user.displayName) return user.displayName
   return user.userId ? `ID ${user.userId}` : 'Свободный слот'
+}
+
+function getRelationLabel(relation: FriendRelation): string {
+  switch (relation) {
+    case 'friend':
+      return 'Друг'
+    case 'incoming':
+      return 'Входящая заявка'
+    case 'outgoing':
+      return 'Исходящая заявка'
+    case 'self':
+      return 'Это вы'
+    default:
+      return 'Не в друзьях'
+  }
 }
 
 type LocalInventory = Record<string, number>
@@ -1533,6 +1562,11 @@ function FriendsPanel({
   const [loadingSearch, setLoadingSearch] = useState(false)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [transferTarget, setTransferTarget] = useState<UserPreview | null>(null)
+  const [profileTarget, setProfileTarget] = useState<UserPreview | null>(null)
+  const [profileState, setProfileState] = useState<FriendProfileState | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const profileRequestIdRef = useRef(0)
 
   const transferableCards = useMemo(() => getTransferableCards(inventory), [inventory])
 
@@ -1641,6 +1675,62 @@ function FriendsPanel({
     }
   }, [onReloadInventory, refreshAll, transferTarget, userId])
 
+  const handleOpenProfile = useCallback(async (target: UserPreview) => {
+    const requestId = profileRequestIdRef.current + 1
+    profileRequestIdRef.current = requestId
+    setProfileTarget(target)
+    setProfileState({
+      preview: target,
+      profile: null,
+      business: null,
+      hasApartment: false,
+    })
+    setProfileError(null)
+    setLoadingProfile(true)
+
+    const [profileData, businessData, inventoryData] = await Promise.all([
+      fetchWithTimeout(`/api/profile?userId=${encodeURIComponent(target.userId)}`)
+        .then(async (response) => {
+          if (!response.ok) return null
+          return await response.json() as PublicUserProfile
+        })
+        .catch(() => null),
+      fetchWithTimeout(`/api/business?userId=${encodeURIComponent(target.userId)}`)
+        .then(async (response) => {
+          if (!response.ok) return null
+          return await response.json() as BusinessPayload
+        })
+        .catch(() => null),
+      fetchWithTimeout(`/api/inventory?userId=${encodeURIComponent(target.userId)}`)
+        .then(async (response) => {
+          if (!response.ok) return null
+          return await response.json() as { items?: { card_id: string }[] }
+        })
+        .catch(() => null),
+    ])
+
+    if (profileRequestIdRef.current !== requestId) return
+
+    const hasApartment = Boolean(inventoryData?.items?.some((item) => item.card_id === APARTMENT_CARD_ID))
+
+    setProfileState({
+      preview: target,
+      profile: profileData,
+      business: businessData,
+      hasApartment,
+    })
+    setProfileError(profileData || businessData || inventoryData ? null : 'Не удалось загрузить профиль пользователя')
+    setLoadingProfile(false)
+  }, [])
+
+  const closeProfile = useCallback(() => {
+    profileRequestIdRef.current += 1
+    setProfileTarget(null)
+    setProfileState(null)
+    setProfileError(null)
+    setLoadingProfile(false)
+  }, [])
+
   const renderUserRow = (user: UserPreview, options?: { compact?: boolean }) => {
     const canAdd = user.relation === 'none' || user.relation === 'incoming'
     const canSend = transferableCards.length > 0
@@ -1654,7 +1744,19 @@ function FriendsPanel({
             : 'Добавить в друзья'
 
     return (
-      <div key={`${options?.compact ? 'compact' : 'full'}-${user.userId}`} className="friendRow">
+      <div
+        key={`${options?.compact ? 'compact' : 'full'}-${user.userId}`}
+        className="friendRow isClickable"
+        role="button"
+        tabIndex={0}
+        onClick={() => void handleOpenProfile(user)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            void handleOpenProfile(user)
+          }
+        }}
+      >
         <div className="friendMeta">
           <div className="friendPrimary">{getUserPrimaryLabel(user)}</div>
           <div className="friendSecondary">{getUserSecondaryLabel(user)}</div>
@@ -1663,7 +1765,10 @@ function FriendsPanel({
           <button
             type="button"
             className={`friendActionButton ${canAdd ? '' : 'isDisabled'}`}
-            onClick={() => canAdd && void handleAdd(user)}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (canAdd) void handleAdd(user)
+            }}
             disabled={!canAdd || busyUserId === user.userId}
             title={addTitle}
             aria-label={addTitle}
@@ -1673,7 +1778,10 @@ function FriendsPanel({
           <button
             type="button"
             className={`friendActionButton ${canSend ? '' : 'isDisabled'}`}
-            onClick={() => canSend && setTransferTarget(user)}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (canSend) setTransferTarget(user)
+            }}
             disabled={!canSend || busyUserId === user.userId}
             title={canSend ? 'Отправить предмет' : 'Нет предметов для отправки'}
             aria-label={canSend ? 'Отправить предмет' : 'Нет предметов для отправки'}
@@ -1787,6 +1895,91 @@ function FriendsPanel({
               </div>
             ) : (
               <div className="friendsEmpty">В инвентаре нет предметов для отправки.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {profileTarget && (
+        <div className="friendProfileOverlay" onClick={closeProfile}>
+          <div className="friendProfileModal" onClick={(e) => e.stopPropagation()}>
+            <div className="friendProfileHeader">
+              <div>
+                <h3>Профиль</h3>
+                <p className="friendProfileHint">Домашняя страница пользователя.</p>
+              </div>
+              <button
+                type="button"
+                className="friendTransferClose"
+                onClick={closeProfile}
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+
+            {loadingProfile ? (
+              <div className="friendsEmpty">Загружаем профиль...</div>
+            ) : (
+              <>
+                <div className={`friendProfileStage ${profileState?.hasApartment ? 'hasBackground' : ''}`}>
+                  {profileState?.hasApartment && (
+                    <>
+                      <div
+                        className="friendProfileBackdrop"
+                        style={{ backgroundImage: `url(${HOME_BACKGROUNDS[0]?.imageSrc ?? ''})` }}
+                        aria-hidden="true"
+                      />
+                      <div className="friendProfileBackdropShade" aria-hidden="true" />
+                    </>
+                  )}
+                  <div className="friendProfileAvatarWrap">
+                    <Stickman />
+                  </div>
+                </div>
+
+                <div className="friendProfileSummary">
+                  <div className="friendProfileEyebrow">{getRelationLabel(profileState?.preview.relation ?? profileTarget.relation)}</div>
+                  <div className="friendProfileName">{getUserPrimaryLabel(profileState?.profile ?? profileTarget)}</div>
+                  <div className="friendProfileSecondary">{getUserSecondaryLabel(profileState?.profile ?? profileTarget)}</div>
+                </div>
+
+                <div className="friendProfileGrid">
+                  <div className="friendProfileCard">
+                    <span className="friendProfileLabel">Баланс</span>
+                    <strong className="friendProfileValue">
+                      {profileState?.profile ? `${formatStars(profileState.profile.stars)} звёзд` : 'Неизвестно'}
+                    </strong>
+                  </div>
+
+                  <div className="friendProfileCard">
+                    <span className="friendProfileLabel">Жильё</span>
+                    <strong className="friendProfileValue">
+                      {profileState?.hasApartment ? 'Квартира' : 'Стандартная сцена'}
+                    </strong>
+                  </div>
+
+                  <div className="friendProfileCard isWide">
+                    <span className="friendProfileLabel">Бизнес</span>
+                    <strong className="friendProfileValue">
+                      {profileState?.business?.business
+                        ? profileState.business.business.name
+                        : 'Бизнес не открыт'}
+                    </strong>
+                    {profileState?.business?.business && (
+                      <span className="friendProfileSubvalue">
+                        {profileState.business.mode === 'owner'
+                          ? `Владелец, капитал ${formatStars(profileState.business.business.capital)}`
+                          : profileState.business.assignment
+                            ? `${profileState.business.assignment.roleName}, капитал ${formatStars(profileState.business.business.capital)}`
+                            : `Сотрудник, капитал ${formatStars(profileState.business.business.capital)}`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {profileError && <div className="friendsNotice">{profileError}</div>}
+              </>
             )}
           </div>
         </div>
@@ -2282,6 +2475,14 @@ function ClickerModal({
   const activeEmployeeReward = businessMode === 'employee' && businessProfile
     ? getEmployeeBusinessClickReward(businessProfile.capital)
     : null
+  const clickDescription = activeEmployeeReward
+    ? [
+        `1 клик сейчас приносит вам +${activeEmployeeReward.workerStars}, владельцу +${activeEmployeeReward.ownerStars}, а капиталу бизнеса +${activeEmployeeReward.businessCapital}.`,
+        Number(businessProfile?.capital ?? '0') < BUSINESS_CLICK_DOUBLE_THRESHOLD
+          ? `После ${formatStars(String(BUSINESS_CLICK_DOUBLE_THRESHOLD))} капитала выплаты удвоятся.`
+          : 'Бизнес уже вышел на усиленные выплаты.',
+      ].join(' ')
+    : '1 клик сейчас приносит +1 звезду на ваш баланс.'
 
   const handleTap = useCallback(() => {
     const activeBusiness = businessMode === 'employee' ? latestBusinessRef.current : null
@@ -2334,17 +2535,13 @@ function ClickerModal({
         className="clickerModal"
         role="dialog"
         aria-modal="true"
-        aria-label="Кликер звёзд"
+        aria-label="Работа"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="clickerHeader">
           <div>
-            <h3>Звёздный кликер</h3>
-            <p className="clickerSubtext">
-              {activeEmployeeReward
-                ? `Каждый клик: вам +${activeEmployeeReward.workerStars}, бизнесу +${activeEmployeeReward.businessCapital}, владельцу +${activeEmployeeReward.ownerStars}.`
-                : 'Каждое нажатие даёт +1 звезду на баланс.'}
-            </p>
+            <h3>Работа</h3>
+            <p className="clickerSubtext">{clickDescription}</p>
           </div>
           <button type="button" className="slotsClose" onClick={onClose} aria-label="Закрыть">
             ×
@@ -3367,7 +3564,7 @@ function App() {
             <button
               type="button"
               className="edgeCoinButton"
-              aria-label="Кликер звёзд"
+              aria-label="Работа"
               onClick={() => setIsClickerOpen(true)}
             >
               <CoinIcon />
