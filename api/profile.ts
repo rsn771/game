@@ -15,7 +15,13 @@ export const config = {
 export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
   if (req.method === 'POST') {
     const body = await readJsonBody<
-      | { userId?: string; previousUserId?: string | null; username?: string | null; displayName?: string | null }
+      | {
+          userId?: string
+          previousUserId?: string | null
+          username?: string | null
+          displayName?: string | null
+          avatarModel?: string | null
+        }
       | null
     >(req)
     const userId = body?.userId
@@ -32,6 +38,7 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
       userId,
       username: body?.username,
       displayName: body?.displayName,
+      avatarModel: body?.avatarModel,
     })
 
     const profile = await getUserById(userId)
@@ -45,6 +52,7 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
       username: profile.username,
       displayName: profile.display_name,
       stars: profile.stars,
+      avatarModel: profile.avatar_model ?? 'classic',
     })
     return
   }
@@ -73,5 +81,6 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
     username: profile.username,
     displayName: profile.display_name,
     stars: profile.stars,
+    avatarModel: profile.avatar_model ?? 'classic',
   })
 }

@@ -190,27 +190,140 @@
 }
 
 @media (max-width: 640px) {
+  .friendProfileOverlay {
+    align-items: end;
+    padding:
+      calc(var(--safe-top) + 10px)
+      10px
+      calc(var(--safe-bottom) + 10px);
+  }
+
   .friendProfileModal {
-    width: min(96vw, 420px);
-    padding: 16px;
-    border-radius: 24px;
+    width: min(100%, 420px);
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px);
+    gap: 12px;
+    padding: 14px;
+    border-radius: 24px 24px 22px 22px;
+  }
+
+  .friendProfileHeader {
+    gap: 10px;
+  }
+
+  .friendProfileHeader h3 {
+    font-size: 22px;
+  }
+
+  .friendProfileHint {
+    font-size: 12px;
+    line-height: 1.35;
   }
 
   .friendProfileStage,
   .friendProfileAvatarWrap {
-    min-height: 286px;
+    min-height: 250px;
+  }
+
+  .friendProfileStage {
+    border-radius: 20px;
+  }
+
+  .friendProfileAvatarWrap {
+    padding: 18px 14px 0;
+  }
+
+  .friendProfileAvatarWrap .stickman {
+    width: min(50vw, 174px);
   }
 
   .friendProfileGrid {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .friendProfileSummary {
+    gap: 3px;
   }
 
   .friendProfileCard.isWide {
     grid-column: auto;
   }
 
+  .friendProfileCard {
+    gap: 5px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
   .friendProfileName {
-    font-size: 24px;
+    font-size: 22px;
+    line-height: 1.08;
+  }
+
+  .friendProfileSecondary {
+    font-size: 13px;
+  }
+
+  .friendProfileLabel {
+    font-size: 10px;
+  }
+
+  .friendProfileValue {
+    font-size: 16px;
+  }
+
+  .friendProfileSubvalue {
+    font-size: 12px;
+    line-height: 1.32;
+  }
+}
+
+@media (max-width: 420px) {
+  .friendProfileOverlay {
+    padding:
+      calc(var(--safe-top) + 8px)
+      8px
+      calc(var(--safe-bottom) + 8px);
+  }
+
+  .friendProfileModal {
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 16px);
+    padding: 12px;
+    border-radius: 22px 22px 20px 20px;
+  }
+
+  .friendProfileHeader h3 {
+    font-size: 20px;
+  }
+
+  .friendProfileStage,
+  .friendProfileAvatarWrap {
+    min-height: 224px;
+  }
+
+  .friendProfileAvatarWrap {
+    padding: 14px 10px 0;
+  }
+
+  .friendProfileAvatarWrap .stickman {
+    width: min(52vw, 156px);
+  }
+
+  .friendProfileEyebrow {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+  }
+
+  .friendProfileName {
+    font-size: 20px;
+  }
+
+  .friendProfileSecondary {
+    font-size: 12px;
+  }
+
+  .friendProfileCard {
+    padding: 11px;
   }
 }
 
@@ -402,9 +515,22 @@ body {
   fill: var(--fg);
 }
 
+.stickmanHair {
+  fill: var(--fg);
+}
+
 /* вырезы (лицо) */
 .stickmanCut {
   fill: var(--bg);
+}
+
+.stickmanOutline {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 /* лёгкое "порхание" */
@@ -1576,6 +1702,99 @@ body {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.customizeModelGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.avatarModelCard {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(0, 0, 0, 0.58);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  color: var(--fg);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.avatarModelCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04)),
+    rgba(0, 0, 0, 0.68);
+}
+
+.avatarModelCard.isActive {
+  border-color: rgba(255, 255, 255, 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05)),
+    rgba(0, 0, 0, 0.74);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 18px 36px rgba(0, 0, 0, 0.28);
+}
+
+.avatarModelPreview {
+  min-height: 196px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.avatarModelPreview .stickman {
+  width: min(40vw, 156px);
+}
+
+.avatarModelMeta {
+  display: grid;
+  gap: 6px;
+}
+
+.avatarModelNameRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.avatarModelName {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.avatarModelBadge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.avatarModelDescription {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .customizeSubnote {
@@ -3380,6 +3599,10 @@ body.inventoryDragActive {
     grid-template-columns: 1fr;
   }
 
+  .customizeModelGrid {
+    grid-template-columns: 1fr;
+  }
+
   .customizeStudio {
     min-height: 470px;
     padding: 18px 10px 16px;
@@ -3397,6 +3620,14 @@ body.inventoryDragActive {
 
   .customizeAvatarCard .stickman {
     width: min(44vw, 176px);
+  }
+
+  .avatarModelPreview {
+    min-height: 168px;
+  }
+
+  .avatarModelPreview .stickman {
+    width: min(46vw, 144px);
   }
 
   .customizeAction {

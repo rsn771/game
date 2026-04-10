@@ -38,6 +38,14 @@ type TelegramIdentity = {
   displayName: string | null
 }
 
+type AvatarModelId = 'classic' | 'minimal_long_hair'
+
+type AvatarModelDef = {
+  id: AvatarModelId
+  name: string
+  description: string
+}
+
 type HomeBackgroundId = 'none' | 'apartment_sunrise' | 'apartment_midnight'
 
 type HomeBackgroundDef = {
@@ -110,6 +118,7 @@ type PublicUserProfile = {
   username: string | null
   displayName: string | null
   stars: string
+  avatarModel: AvatarModelId
 }
 
 type FriendProfileState = {
@@ -203,6 +212,19 @@ const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
     name: 'Ночной лофт',
     description: 'Темный интерьер квартиры с ночным городом за панорамным окном.',
     imageSrc: '/home-bg-apartment-midnight.svg',
+  },
+]
+
+const AVATAR_MODELS: AvatarModelDef[] = [
+  {
+    id: 'classic',
+    name: 'Классическая',
+    description: 'Текущий минималистичный человечек из игры без волос.',
+  },
+  {
+    id: 'minimal_long_hair',
+    name: 'С длинными волосами',
+    description: 'Новая минималистичная моделька с длинными волосами и тонким силуэтом.',
   },
 ]
 
@@ -480,6 +502,33 @@ function pickLocalPackReward(): PackRewardResult {
     kind: 'empty',
     title: 'Пусто',
     subtitle: 'В этот раз без награды',
+  }
+}
+
+function resolveAvatarModelId(value: string | null | undefined): AvatarModelId {
+  return AVATAR_MODELS.some((model) => model.id === value)
+    ? (value as AvatarModelId)
+    : 'classic'
+}
+
+function getAvatarModelById(modelId: AvatarModelId): AvatarModelDef {
+  return AVATAR_MODELS.find((model) => model.id === modelId) ?? AVATAR_MODELS[0]
+}
+
+function loadAvatarModel(userId: string): AvatarModelId {
+  try {
+    const raw = localStorage.getItem(`avatar_model_${userId}`)
+    return resolveAvatarModelId(raw)
+  } catch {
+    return 'classic'
+  }
+}
+
+function saveAvatarModel(userId: string, modelId: AvatarModelId) {
+  try {
+    localStorage.setItem(`avatar_model_${userId}`, modelId)
+  } catch {
+    // ignore
   }
 }
 
@@ -1194,7 +1243,7 @@ function ItemIcon({ className }: { className?: string }) {
   )
 }
 
-function Stickman() {
+function ClassicStickman() {
   return (
     <svg
       className="stickman"
@@ -1297,6 +1346,223 @@ function Stickman() {
       </g>
     </svg>
   )
+}
+
+function LongHairStickman() {
+  return (
+    <svg
+      className="stickman"
+      viewBox="0 0 240 320"
+      role="img"
+      aria-label="Человечек с длинными волосами"
+    >
+      <g className="stickmanSilhouette stickmanFloat">
+        <path
+          className="stickmanHair"
+          d="
+            M 82 58
+            C 82 24 100 8 120 8
+            C 140 8 158 24 158 58
+            L 158 124
+            C 158 138 163 149 166 160
+            C 169 171 165 178 156 182
+            C 148 186 140 182 136 174
+            C 132 163 126 149 121 132
+            L 119 132
+            C 114 149 108 163 104 174
+            C 100 182 92 186 84 182
+            C 75 178 71 171 74 160
+            C 77 149 82 138 82 124
+            Z
+          "
+        />
+        <path
+          className="stickmanOutline"
+          d="
+            M 82 58
+            C 82 24 100 8 120 8
+            C 140 8 158 24 158 58
+            L 158 124
+            C 158 138 163 149 166 160
+            C 169 171 165 178 156 182
+            C 148 186 140 182 136 174
+            C 132 163 126 149 121 132
+            L 119 132
+            C 114 149 108 163 104 174
+            C 100 182 92 186 84 182
+            C 75 178 71 171 74 160
+            C 77 149 82 138 82 124
+            Z
+          "
+        />
+
+        <g className="stickmanHead">
+          <ellipse className="stickmanPart" cx="120" cy="56" rx="29" ry="32" />
+          <path
+            className="stickmanOutline"
+            d="
+              M 91 56
+              A 29 32 0 0 0 149 56
+            "
+          />
+          <path
+            className="stickmanCut"
+            d="
+              M 119 24
+              C 116 36 108 48 92 58
+            "
+            stroke="var(--bg)"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            className="stickmanCut"
+            d="
+              M 121 24
+              C 124 36 132 48 148 58
+            "
+            stroke="var(--bg)"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <circle className="stickmanCut" cx="109" cy="52" r="4.8" />
+          <circle className="stickmanCut" cx="131" cy="52" r="4.8" />
+          <rect className="stickmanCut" x="110" y="69" width="20" height="4.4" rx="2.2" />
+        </g>
+
+        <g transform="translate(4 -10) translate(96 120) rotate(17) scale(0.68 1) translate(-96 -120)">
+          <g className="stickmanArmLeft">
+            <path
+              className="stickmanPart"
+              d="
+                M 92 108
+                C 70 126 60 154 64 182
+                C 68 212 92 224 104 206
+                C 116 188 100 172 102 150
+                C 104 128 116 118 128 112
+                C 116 122 102 128 92 108
+                Z
+              "
+            />
+            <path
+              className="stickmanOutline"
+              d="
+                M 84 122
+                C 68 140 60 160 64 182
+                C 68 212 92 224 104 206
+                C 116 188 100 172 102 150
+                C 103 136 108 126 118 118
+              "
+            />
+          </g>
+        </g>
+        <g transform="translate(-4 -10) translate(144 120) rotate(-17) scale(0.68 1) translate(-144 -120)">
+          <g className="stickmanArmRight">
+            <path
+              className="stickmanPart"
+              d="
+                M 148 108
+                C 170 126 180 154 176 182
+                C 172 212 148 224 136 206
+                C 124 188 140 172 138 150
+                C 136 128 124 118 112 112
+                C 124 122 138 128 148 108
+                Z
+              "
+            />
+            <path
+              className="stickmanOutline"
+              d="
+                M 156 122
+                C 172 140 180 160 176 182
+                C 172 212 148 224 136 206
+                C 124 188 140 172 138 150
+                C 137 136 132 126 122 118
+              "
+            />
+          </g>
+        </g>
+
+        <rect className="stickmanPart" x="98" y="97" width="44" height="20" rx="9" />
+        <path
+          className="stickmanOutline"
+          d="
+            M 107 97
+            L 133 97
+          "
+        />
+        <path
+          className="stickmanPart"
+          d="
+            M 99 108
+            C 99 120 99 132 100 144
+            L 100 170
+            C 100 182 94 188 88 192
+            Q 120 212 152 192
+            C 146 188 140 182 140 170
+            L 140 144
+            C 141 132 141 120 141 108
+            C 141 102 139 98 135 98
+            L 105 98
+            C 101 98 99 102 99 108
+            Z
+          "
+        />
+        <path
+          className="stickmanOutline"
+          d="
+            M 100 126
+            C 100 132 100 138 100 144
+            L 100 170
+            C 100 182 94 188 88 192
+            Q 120 212 152 192
+            C 146 188 140 182 140 170
+            L 140 144
+            C 140 138 140 132 140 126
+          "
+        />
+
+        <g transform="translate(6 0)">
+          <path
+            className="stickmanPart stickmanLegLeft"
+            d="
+              M 90 192
+              Q 116 176 142 192
+              C 156 220 158 248 156 286
+              C 154 308 134 314 120 298
+              C 104 280 114 258 118 238
+              C 124 210 106 198 90 192
+              Z
+            "
+          />
+        </g>
+        <g transform="translate(-6 0)">
+          <path
+            className="stickmanPart stickmanLegRight"
+            d="
+              M 150 192
+              Q 124 176 98 192
+              C 84 220 82 248 84 286
+              C 86 308 106 314 120 298
+              C 136 280 126 258 122 238
+              C 116 210 134 198 150 192
+              Z
+            "
+          />
+        </g>
+      </g>
+    </svg>
+  )
+}
+
+function Stickman({ modelId = 'classic' }: { modelId?: AvatarModelId }) {
+  if (modelId === 'minimal_long_hair') {
+    return <LongHairStickman />
+  }
+
+  return <ClassicStickman />
 }
 
 const LONG_PRESS_MS = 420
@@ -2038,7 +2304,7 @@ function FriendsPanel({
                     </>
                   )}
                   <div className="friendProfileAvatarWrap">
-                    <Stickman />
+                    <Stickman modelId={resolveAvatarModelId(profileState?.profile?.avatarModel)} />
                   </div>
                 </div>
 
@@ -2109,8 +2375,8 @@ const CUSTOMIZE_CATEGORIES: CustomizeCategoryDef[] = [
   },
   {
     id: 'build',
-    label: 'Телосложение',
-    description: 'Позже здесь появятся варианты фигуры и силуэта человечка.',
+    label: 'Моделька',
+    description: 'Здесь будут собираться варианты базовой модельки персонажа и её силуэта.',
     placement: 'right',
     Icon: BuildIcon,
   },
@@ -2137,9 +2403,17 @@ const CUSTOMIZE_CATEGORIES: CustomizeCategoryDef[] = [
   },
 ]
 
-function CustomizePanel() {
+function CustomizePanel({
+  selectedAvatarModelId,
+  onSelectAvatarModel,
+}: {
+  selectedAvatarModelId: AvatarModelId
+  onSelectAvatarModel: (modelId: AvatarModelId) => void
+}) {
   const [activeCategoryId, setActiveCategoryId] = useState<CustomizeCategoryId>('pose')
   const activeCategory = CUSTOMIZE_CATEGORIES.find((category) => category.id === activeCategoryId) ?? CUSTOMIZE_CATEGORIES[0]
+  const selectedAvatarModel = getAvatarModelById(selectedAvatarModelId)
+  const showModelPicker = activeCategory.id === 'build'
 
   return (
     <section className="panel customizePanel">
@@ -2176,11 +2450,11 @@ function CustomizePanel() {
           <div className="customizeAvatarStage">
             <div className="customizeAvatarHalo" aria-hidden="true" />
             <div className="customizeAvatarCard">
-              <Stickman />
+              <Stickman modelId={selectedAvatarModelId} />
             </div>
             <div className="customizeAvatarMeta">
               <span className="customizeAvatarEyebrow">Персонаж</span>
-              <span className="customizeAvatarName">Ваш человечек</span>
+              <span className="customizeAvatarName">{selectedAvatarModel.name}</span>
             </div>
           </div>
         </div>
@@ -2191,6 +2465,34 @@ function CustomizePanel() {
         <div className="customizeSelectionTitle">{activeCategory.label}</div>
         <p className="customizeSelectionText">{activeCategory.description}</p>
       </div>
+
+      {showModelPicker && (
+        <div className="customizeModelGrid">
+          {AVATAR_MODELS.map((model) => {
+            const isActive = model.id === selectedAvatarModelId
+            return (
+              <button
+                key={model.id}
+                type="button"
+                className={`avatarModelCard ${isActive ? 'isActive' : ''}`}
+                onClick={() => onSelectAvatarModel(model.id)}
+                aria-pressed={isActive}
+              >
+                <div className="avatarModelPreview">
+                  <Stickman modelId={model.id} />
+                </div>
+                <div className="avatarModelMeta">
+                  <div className="avatarModelNameRow">
+                    <span className="avatarModelName">{model.name}</span>
+                    {isActive && <span className="avatarModelBadge">Выбрана</span>}
+                  </div>
+                  <span className="avatarModelDescription">{model.description}</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <p className="customizeSubnote">Темы квартиры и другие активы остаются в инвентаре через предметы.</p>
     </section>
@@ -3335,6 +3637,7 @@ function App() {
   const [businessMode, setBusinessMode] = useState<BusinessMode>('none')
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(() => loadLocalBusiness(userId))
   const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
+  const [selectedAvatarModelId, setSelectedAvatarModelId] = useState<AvatarModelId>(() => loadAvatarModel(userId))
   const hasApartment = useMemo(
     () => inventory.some((item) => item.cardId === APARTMENT_CARD_ID),
     [inventory]
@@ -3396,6 +3699,7 @@ function App() {
     setBusinessProfile(loadLocalBusiness(userId))
     setBusinessMode(loadLocalBusiness(userId) ? 'owner' : 'none')
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
+    setSelectedAvatarModelId(loadAvatarModel(userId))
     setPackNextOpenAt(loadLocalPackNextOpenAt(userId))
   }, [userId])
 
@@ -3427,14 +3731,48 @@ function App() {
         }),
       })
       if (!r.ok) return
-      const data = (await r.json()) as { userId: string; stars: string }
+      const data = (await r.json()) as { userId: string; stars: string; avatarModel?: string | null }
       const nextStars = typeof data.stars === 'string' ? data.stars : fallbackStars
+      const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
       setStars(nextStars)
       saveLocalStars(userId, nextStars)
+      setSelectedAvatarModelId(nextAvatarModel)
+      saveAvatarModel(userId, nextAvatarModel)
       pendingMigrationUserIdRef.current = null
     } catch {
       setStars(fallbackStars)
     }
+  }, [telegramIdentity.displayName, telegramIdentity.username, userId])
+
+  const handleSelectAvatarModel = useCallback((modelId: AvatarModelId) => {
+    setSelectedAvatarModelId(modelId)
+    saveAvatarModel(userId, modelId)
+
+    void (async () => {
+      try {
+        const r = await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            username: telegramIdentity.username,
+            displayName: telegramIdentity.displayName,
+            avatarModel: modelId,
+          }),
+        })
+        if (!r.ok) return
+        const data = (await r.json()) as { stars?: string; avatarModel?: string | null }
+        const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
+        setSelectedAvatarModelId(nextAvatarModel)
+        saveAvatarModel(userId, nextAvatarModel)
+        if (typeof data.stars === 'string') {
+          setStars(data.stars)
+          saveLocalStars(userId, data.stars)
+        }
+      } catch {
+        // local preview already updated
+      }
+    })()
   }, [telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const loadInventory = useCallback(async () => {
@@ -3738,7 +4076,7 @@ function App() {
                 </>
               )}
               <div className="homeAvatarWrap">
-                <Stickman />
+                <Stickman modelId={selectedAvatarModelId} />
               </div>
             </div>
             <button
@@ -3818,7 +4156,10 @@ function App() {
         )}
 
         {tab === 'customize' && (
-          <CustomizePanel />
+          <CustomizePanel
+            selectedAvatarModelId={selectedAvatarModelId}
+            onSelectAvatarModel={handleSelectAvatarModel}
+          />
         )}
 
         {tab === 'business' && businessProfile && (

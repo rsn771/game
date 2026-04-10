@@ -24,6 +24,7 @@ export type UserProfileInput = {
   userId: string
   username?: string | null
   displayName?: string | null
+  avatarModel?: string | null
 }
 
 function isAnonymousUserId(userId: string): boolean {
@@ -196,6 +197,9 @@ async function ensureSchemaOnce() {
   await query`alter table users add column if not exists username text;`
   await query`alter table users add column if not exists display_name text;`
   await query`alter table users add column if not exists last_pack_opened_at timestamptz;`
+  await query`alter table users add column if not exists avatar_model text;`
+  await query`update users set avatar_model = 'classic' where avatar_model is null;`
+  await query`alter table users alter column avatar_model set default 'classic';`
 
   await query`
     create table if not exists cards (
@@ -258,6 +262,22 @@ async function ensureSchemaOnce() {
   }
 
   await query`
+    create table if not exists business_invites (
+      id bigserial primary key,
+      owner_user_id text not null references businesses(owner_user_id) on delete cascade,
+      sender_user_id text not null references users(tg_user_id) on delete cascade,
+      slot_index integer not null,
+      target_user_id text not null references users(tg_user_id) on delete cascade,
+      role_name text not null default '',
+      status text not null default 'pending',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      check (slot_index >= 0 and slot_index < 6),
+      check (status in ('pending', 'accepted', 'declined', 'cancelled'))
+    );
+  `
+
+  await query`
     create table if not exists app_meta (
       key text primary key,
       value text not null
@@ -294,6 +314,33 @@ async function ensureSchemaOnce() {
     on business_staff (employee_user_id);
   `
 
+  await query`
+    create index if not exists business_invites_target_status_idx
+    on business_invites (target_user_id, status, updated_at desc);
+  `
+
+  await query`
+    create index if not exists business_invites_owner_status_idx
+    on business_invites (owner_user_id, status, updated_at desc);
+  `
+
+  await query`
+    create index if not exists business_invites_sender_status_idx
+    on business_invites (sender_user_id, status, updated_at desc);
+  `
+
+  await query`
+    create unique index if not exists business_invites_pending_slot_idx
+    on business_invites (owner_user_id, slot_index)
+    where status = 'pending';
+  `
+
+  await query`
+    create unique index if not exists business_invites_pending_target_idx
+    on business_invites (target_user_id)
+    where status = 'pending';
+  `
+
   await seedCards(query)
   await seedBonusUser(query)
   await seedSearchableUsers(query)
@@ -319,13 +366,15 @@ export async function upsertUserProfile(input: UserProfileInput) {
   await ensureSchema()
   const username = normalizeOptionalText(input.username)
   const displayName = normalizeOptionalText(input.displayName)
+  const avatarModel = normalizeOptionalText(input.avatarModel)
 
   await sql`
-    insert into users (tg_user_id, username, display_name)
-    values (${input.userId}, ${username}, ${displayName})
+    insert into users (tg_user_id, username, display_name, avatar_model)
+    values (${input.userId}, ${username}, ${displayName}, coalesce(${avatarModel}, 'classic'))
     on conflict (tg_user_id) do update
     set username = coalesce(excluded.username, users.username),
         display_name = coalesce(excluded.display_name, users.display_name),
+        avatar_model = coalesce(excluded.avatar_model, users.avatar_model),
         updated_at = now();
   `
 }
@@ -339,6 +388,10 @@ export async function migrateAnonymousUserData(previousUserId: string, nextUserI
   await sql`
     update users as target
     set stars = greatest(target.stars, source.stars),
+        avatar_model = case
+          when target.avatar_model = 'classic' and source.avatar_model is not null then source.avatar_model
+          else target.avatar_model
+        end,
         updated_at = now()
     from users as source
     where target.tg_user_id = ${nextUserId}
@@ -406,12 +459,46 @@ export async function migrateAnonymousUserData(previousUserId: string, nextUserI
         where existing.employee_user_id = ${nextUserId}
       );
   `
+
+  await sql`
+    update business_invites
+    set sender_user_id = ${nextUserId},
+        updated_at = now()
+    where sender_user_id = ${previousUserId};
+  `
+
+  await sql`
+    update business_invites
+    set target_user_id = ${nextUserId},
+        updated_at = now()
+    where target_user_id = ${previousUserId}
+      and not exists (
+        select 1
+        from business_invites existing
+        where existing.target_user_id = ${nextUserId}
+          and existing.status = 'pending'
+      );
+  `
+
+  await sql`
+    update business_invites
+    set status = 'cancelled',
+        updated_at = now()
+    where target_user_id = ${previousUserId}
+       or sender_user_id = ${previousUserId};
+  `
 }
 
 export async function getUserById(userId: string) {
   await ensureSchema()
-  const { rows } = await sql<{ tg_user_id: string; username: string | null; display_name: string | null; stars: string }>`
-    select tg_user_id, username, display_name, stars::text as stars
+  const { rows } = await sql<{
+    tg_user_id: string
+    username: string | null
+    display_name: string | null
+    stars: string
+    avatar_model: string | null
+  }>`
+    select tg_user_id, username, display_name, stars::text as stars, coalesce(avatar_model, 'classic') as avatar_model
     from users
     where tg_user_id = ${userId}
     limit 1;
