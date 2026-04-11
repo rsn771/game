@@ -46,13 +46,14 @@ type AvatarModelDef = {
   description: string
 }
 
-type HomeBackgroundId = 'none' | 'apartment_sunrise' | 'apartment_midnight'
+type HomeBackgroundId = 'none' | 'apartment_sunrise' | 'apartment_midnight' | 'skyline_studio'
 
 type HomeBackgroundDef = {
   id: Exclude<HomeBackgroundId, 'none'>
   name: string
   description: string
   imageSrc: string
+  requiredCardId: string
 }
 
 type NightStarDef = {
@@ -191,7 +192,7 @@ type FriendProfileState = {
   preview: UserPreview
   profile: PublicUserProfile | null
   business: BusinessPayload | null
-  hasApartment: boolean
+  hasHome: boolean
 }
 
 type PackRewardResult =
@@ -235,6 +236,9 @@ const SEEDED_STAR_BALANCES: Record<string, string> = {
 }
 
 const APARTMENT_CARD_ID = 'asset_apartment'
+const SKYLINE_STUDIO_CARD_ID = 'asset_skyline_studio'
+const APARTMENT_SHOP_PRICE = 10_000
+const SKYLINE_STUDIO_SHOP_PRICE = 50_000
 const BUSINESS_OPEN_COST = 100_000
 const BUSINESS_START_CAPITAL = 80_000
 const BUSINESS_CLICK_DOUBLE_THRESHOLD = 150_000
@@ -272,12 +276,21 @@ const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
     name: 'Светлая квартира',
     description: 'Тёплая гостиная с большим окном и мягким дневным светом.',
     imageSrc: '/home-bg-apartment-sunrise.svg',
+    requiredCardId: APARTMENT_CARD_ID,
   },
   {
     id: 'apartment_midnight',
     name: 'Ночной лофт',
     description: 'Темный интерьер квартиры с ночным городом за панорамным окном.',
     imageSrc: '/home-bg-apartment-midnight.svg',
+    requiredCardId: APARTMENT_CARD_ID,
+  },
+  {
+    id: 'skyline_studio',
+    name: 'Ночная skyline-студия',
+    description: 'Студия с панорамным skyline, живыми огнями города и ночной атмосферой.',
+    imageSrc: '/home-bg-skyline-studio.svg',
+    requiredCardId: SKYLINE_STUDIO_CARD_ID,
   },
 ]
 
@@ -353,6 +366,7 @@ const PACK_CARDS: CardDef[] = [
 
 const ALL_CARDS: CardDef[] = [
   { id: APARTMENT_CARD_ID, name: 'Квартира', imageSrc: '/home-bg-apartment-sunrise.svg' },
+  { id: SKYLINE_STUDIO_CARD_ID, name: 'Ночная skyline-студия', imageSrc: '/home-bg-skyline-studio.svg' },
   ...PACK_CARDS,
   { id: 'rose_2red', name: '2 красные розы', imageSrc: '/card-rose-2red.png' },
   { id: 'rose_bouquet', name: 'Букет красных роз', imageSrc: '/card-rose-bouquet.png' },
@@ -624,6 +638,11 @@ function ensureLocalInventoryMigration(userId: string) {
 
 function getHomeBackgroundById(backgroundId: HomeBackgroundId): HomeBackgroundDef | null {
   return HOME_BACKGROUNDS.find((background) => background.id === backgroundId) ?? null
+}
+
+function getOwnedHomeBackgrounds(inventory: InventoryItem[]): HomeBackgroundDef[] {
+  const ownedCardIds = new Set(inventory.map((item) => item.cardId))
+  return HOME_BACKGROUNDS.filter((background) => ownedCardIds.has(background.requiredCardId))
 }
 
 function loadHomeBackground(userId: string): HomeBackgroundId {
@@ -1179,6 +1198,19 @@ function MailIcon({ className }: { className?: string }) {
         <path d="m14 22 16.2 12.6a3 3 0 0 0 3.6 0L50 22" />
         <path d="m18 42 10.5-10" opacity="0.72" />
         <path d="m46 42-10.5-10" opacity="0.72" />
+      </g>
+    </svg>
+  )
+}
+
+function ShopIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 24h36l-2.8 26a4 4 0 0 1-4 3.6H20.8a4 4 0 0 1-4-3.6L14 24Z" />
+        <path d="M22 24v-5a10 10 0 0 1 20 0v5" />
+        <path d="M24 33h.01M40 33h.01" strokeWidth="4" />
+        <path d="M26 42h12" />
       </g>
     </svg>
   )
@@ -2215,7 +2247,7 @@ function FriendsPanel({
       preview: target,
       profile: null,
       business: null,
-      hasApartment: false,
+      hasHome: false,
     })
     setProfileError(null)
     setLoadingProfile(true)
@@ -2243,13 +2275,15 @@ function FriendsPanel({
 
     if (profileRequestIdRef.current !== requestId) return
 
-    const hasApartment = Boolean(inventoryData?.items?.some((item) => item.card_id === APARTMENT_CARD_ID))
+    const hasHome = Boolean(inventoryData?.items?.some((item) => (
+      item.card_id === APARTMENT_CARD_ID || item.card_id === SKYLINE_STUDIO_CARD_ID
+    )))
 
     setProfileState({
       preview: target,
       profile: profileData,
       business: businessData,
-      hasApartment,
+      hasHome,
     })
     setProfileError(profileData || businessData || inventoryData ? null : 'Не удалось загрузить профиль пользователя')
     setLoadingProfile(false)
@@ -2454,8 +2488,8 @@ function FriendsPanel({
               <div className="friendsEmpty">Загружаем профиль...</div>
             ) : (
               <>
-                <div className={`friendProfileStage ${profileState?.hasApartment ? 'hasBackground' : ''}`}>
-                  {profileState?.hasApartment && (
+                <div className={`friendProfileStage ${profileState?.hasHome ? 'hasBackground' : ''}`}>
+                  {profileState?.hasHome && (
                     <>
                       <div
                         className="friendProfileBackdrop"
@@ -2487,7 +2521,7 @@ function FriendsPanel({
                   <div className="friendProfileCard">
                     <span className="friendProfileLabel">Жильё</span>
                     <strong className="friendProfileValue">
-                      {profileState?.hasApartment ? 'Квартира' : 'Стандартная сцена'}
+                      {profileState?.hasHome ? 'Есть жильё' : 'Стандартная сцена'}
                     </strong>
                   </div>
 
@@ -2692,10 +2726,12 @@ function CustomizePanel({
 
 function ApartmentThemeModal({
   selectedBackgroundId,
+  availableBackgrounds,
   onSelectBackground,
   onClose,
 }: {
   selectedBackgroundId: HomeBackgroundId
+  availableBackgrounds: HomeBackgroundDef[]
   onSelectBackground: (backgroundId: HomeBackgroundId) => void
   onClose: () => void
 }) {
@@ -2704,8 +2740,8 @@ function ApartmentThemeModal({
       <div className="apartmentThemeModal" onClick={(e) => e.stopPropagation()}>
         <div className="apartmentThemeHeader">
           <div>
-            <h3>Квартира</h3>
-            <p className="apartmentThemeHint">Выберите тему своей квартиры для главной страницы.</p>
+            <h3>Жильё</h3>
+            <p className="apartmentThemeHint">Выберите, какое жильё будет стоять на главной странице.</p>
           </div>
           <button
             type="button"
@@ -2718,7 +2754,7 @@ function ApartmentThemeModal({
         </div>
 
         <div className="customizeGrid">
-          {HOME_BACKGROUNDS.map((background) => {
+          {availableBackgrounds.map((background) => {
             const isActive = selectedBackgroundId === background.id
             return (
               <button
@@ -3659,6 +3695,151 @@ function LeadersPanel({
   )
 }
 
+function ShopPanel({
+  userId,
+  stars,
+  hasApartment,
+  hasSkylineStudio,
+  onClose,
+  onStarsChange,
+  onInventoryReload,
+}: {
+  userId: string
+  stars: string
+  hasApartment: boolean
+  hasSkylineStudio: boolean
+  onClose: () => void
+  onStarsChange: (nextStars: string) => void
+  onInventoryReload: () => Promise<void>
+}) {
+  const [notice, setNotice] = useState<string | null>(null)
+  const [buyingItemId, setBuyingItemId] = useState<string | null>(null)
+
+  const handleBuyHomeItem = useCallback(async (
+    itemId: string,
+    price: number,
+    itemName: string,
+    alreadyOwned: boolean,
+  ) => {
+    if (buyingItemId) return
+
+    if (alreadyOwned) {
+      setNotice(`${itemName} уже есть в инвентаре`)
+      return
+    }
+
+    setBuyingItemId(itemId)
+    setNotice(null)
+
+    try {
+      const r = await fetchWithTimeout('/api/shop', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          itemId,
+        }),
+      })
+      const data = (await r.json().catch(() => null)) as { error?: string; stars?: string } | null
+      if (!r.ok) {
+        setNotice(data?.error ?? `Не удалось купить ${itemName.toLowerCase()}`)
+        return
+      }
+
+      if (typeof data?.stars === 'string') {
+        onStarsChange(data.stars)
+      }
+
+      await onInventoryReload()
+      setNotice(`${itemName} добавлена в инвентарь`)
+    } catch {
+      const currentStars = Number(stars)
+      if (Number.isFinite(currentStars) && currentStars >= price) {
+        const nextStars = String(currentStars - price)
+        upsertLocalCard(userId, itemId, 1)
+        onStarsChange(nextStars)
+        await onInventoryReload()
+        setNotice(`${itemName} куплена локально`)
+      } else {
+        setNotice('Недостаточно звёзд для покупки')
+      }
+    } finally {
+      setBuyingItemId(null)
+    }
+  }, [buyingItemId, onInventoryReload, onStarsChange, stars, userId])
+
+  return (
+    <div className="shopPanelOverlay" onClick={onClose}>
+      <div className="shopPanel" onClick={(e) => e.stopPropagation()}>
+        <div className="shopPanelHeader">
+          <div>
+            <h3>Магазин</h3>
+            <p className="shopPanelHint">Здесь можно покупать жильё и ставить его на главную страницу через инвентарь.</p>
+          </div>
+          <button
+            type="button"
+            className="friendTransferClose"
+            onClick={onClose}
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+
+        {notice && <div className="businessNotice">{notice}</div>}
+
+        <div className="shopList">
+          <article className="shopCard">
+            <div className="shopCardArt" aria-hidden="true">
+              <img className="shopCardImg" src="/home-bg-apartment-sunrise.svg" alt="" />
+            </div>
+            <div className="shopCardBody">
+              <div className="shopCardTitleRow">
+                <div className="shopCardTitle">Квартира</div>
+                <div className="shopCardPrice">{formatStars(String(APARTMENT_SHOP_PRICE))}</div>
+              </div>
+              <p className="shopCardDescription">
+                Открывает домашнюю сцену с квартирой и выбором темы интерьера.
+              </p>
+              <button
+                type="button"
+                className="shopBuyButton"
+                onClick={() => void handleBuyHomeItem(APARTMENT_CARD_ID, APARTMENT_SHOP_PRICE, 'Квартира', hasApartment)}
+                disabled={buyingItemId !== null || hasApartment}
+              >
+                {hasApartment ? 'Уже куплено' : buyingItemId === APARTMENT_CARD_ID ? 'Покупаем...' : 'Купить'}
+              </button>
+            </div>
+          </article>
+
+          <article className="shopCard">
+            <div className="shopCardArt" aria-hidden="true">
+              <img className="shopCardImg" src="/home-bg-skyline-studio.svg" alt="" />
+            </div>
+            <div className="shopCardBody">
+              <div className="shopCardTitleRow">
+                <div className="shopCardTitle">Ночная skyline-студия</div>
+                <div className="shopCardPrice">{formatStars(String(SKYLINE_STUDIO_SHOP_PRICE))}</div>
+              </div>
+              <p className="shopCardDescription">
+                Отдельное жильё с ночным skyline и атмосферной студией. После покупки появится в инвентаре.
+              </p>
+              <button
+                type="button"
+                className="shopBuyButton"
+                onClick={() => void handleBuyHomeItem(SKYLINE_STUDIO_CARD_ID, SKYLINE_STUDIO_SHOP_PRICE, 'Ночная skyline-студия', hasSkylineStudio)}
+                disabled={buyingItemId !== null || hasSkylineStudio}
+              >
+                {hasSkylineStudio ? 'Уже куплено' : buyingItemId === SKYLINE_STUDIO_CARD_ID ? 'Покупаем...' : 'Купить'}
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BusinessPanel({
   userId,
   stars,
@@ -4319,6 +4500,7 @@ function App() {
   const [isPackOpen, setIsPackOpen] = useState(false)
   const [isSlotsOpen, setIsSlotsOpen] = useState(false)
   const [isClickerOpen, setIsClickerOpen] = useState(false)
+  const [isShopOpen, setIsShopOpen] = useState(false)
   const [isMailOpen, setIsMailOpen] = useState(false)
   const [isLeadersOpen, setIsLeadersOpen] = useState(false)
   const [mailInboxCount, setMailInboxCount] = useState(0)
@@ -4342,9 +4524,21 @@ function App() {
     () => inventory.some((item) => item.cardId === APARTMENT_CARD_ID),
     [inventory]
   )
+  const hasSkylineStudio = useMemo(
+    () => inventory.some((item) => item.cardId === SKYLINE_STUDIO_CARD_ID),
+    [inventory]
+  )
+  const availableHomeBackgrounds = useMemo(
+    () => getOwnedHomeBackgrounds(inventory),
+    [inventory]
+  )
   const activeHomeBackground = useMemo(
-    () => (hasApartment ? getHomeBackgroundById(selectedHomeBackgroundId) : null),
-    [hasApartment, selectedHomeBackgroundId]
+    () => {
+      const selected = getHomeBackgroundById(selectedHomeBackgroundId)
+      if (!selected) return null
+      return availableHomeBackgrounds.some((background) => background.id === selected.id) ? selected : null
+    },
+    [availableHomeBackgrounds, selectedHomeBackgroundId]
   )
 
   useEffect(() => {
@@ -4796,6 +4990,21 @@ function App() {
                       ))}
                     </div>
                   )}
+                  {activeHomeBackground.id === 'skyline_studio' && (
+                    <div className="homeSkylineLights" aria-hidden="true">
+                      {Array.from({ length: 14 }).map((_, index) => (
+                        <span
+                          key={index}
+                          className="homeSkylineLight"
+                          style={{
+                            left: `${18 + index * 5.2}%`,
+                            top: `${18 + (index % 5) * 6}%`,
+                            animationDelay: `${index * 0.18}s`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <div className="homeBackdropShade" aria-hidden="true" />
                 </>
               )}
@@ -4810,6 +5019,14 @@ function App() {
               onClick={() => setTab('friends')}
             >
               <FriendsIcon />
+            </button>
+            <button
+              type="button"
+              className="edgeShopButton"
+              aria-label="Магазин"
+              onClick={() => setIsShopOpen(true)}
+            >
+              <ShopIcon />
             </button>
             <button
               type="button"
@@ -4883,7 +5100,7 @@ function App() {
             userId={userId}
             onReload={loadInventory}
             onItemTap={(item) => {
-              if (item.cardId === APARTMENT_CARD_ID) {
+              if (item.cardId === APARTMENT_CARD_ID || item.cardId === SKYLINE_STUDIO_CARD_ID) {
                 setIsApartmentThemeOpen(true)
               }
             }}
@@ -5026,9 +5243,10 @@ function App() {
         />
       )}
 
-      {isApartmentThemeOpen && hasApartment && (
+      {isApartmentThemeOpen && availableHomeBackgrounds.length > 0 && (
         <ApartmentThemeModal
           selectedBackgroundId={selectedHomeBackgroundId}
+          availableBackgrounds={availableHomeBackgrounds}
           onSelectBackground={(backgroundId) => {
             setSelectedHomeBackgroundId(backgroundId)
             saveHomeBackground(userId, backgroundId)
@@ -5046,6 +5264,21 @@ function App() {
             void loadBusinessStatus()
             setTab('business')
           }}
+        />
+      )}
+
+      {isShopOpen && (
+        <ShopPanel
+          userId={userId}
+          stars={stars}
+          hasApartment={hasApartment}
+          hasSkylineStudio={hasSkylineStudio}
+          onClose={() => setIsShopOpen(false)}
+          onStarsChange={(nextStars) => {
+            setStars(nextStars)
+            saveLocalStars(userId, nextStars)
+          }}
+          onInventoryReload={loadInventory}
         />
       )}
 

@@ -59,6 +59,14 @@ async function seedCards(query: SqlRunner) {
 
   await query`
     insert into cards (id, name, image_src)
+    values ('asset_skyline_studio', 'Ночная skyline-студия', '/home-bg-skyline-studio.svg')
+    on conflict (id) do update
+    set name = excluded.name,
+        image_src = excluded.image_src;
+  `
+
+  await query`
+    insert into cards (id, name, image_src)
     values ('rose_red', 'Красная Роза', '/card-rose.png')
     on conflict (id) do update
     set name = excluded.name,

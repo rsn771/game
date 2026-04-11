@@ -480,6 +480,25 @@ body {
   animation: home-night-twinkle 2.2s ease-in-out infinite;
 }
 
+.homeSkylineLights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.homeSkylineLight {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 223, 162, 0.96);
+  box-shadow:
+    0 0 10px rgba(255, 212, 132, 0.62),
+    0 0 20px rgba(120, 180, 255, 0.2);
+  animation: home-skyline-pulse 2.8s ease-in-out infinite;
+}
+
 @keyframes home-night-twinkle {
   0%,
   100% {
@@ -493,6 +512,22 @@ body {
   72% {
     transform: scale(0.92);
     opacity: 0.34;
+  }
+}
+
+@keyframes home-skyline-pulse {
+  0%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.46;
+  }
+  44% {
+    transform: scale(1.08);
+    opacity: 0.96;
+  }
+  68% {
+    transform: scale(1.16);
+    opacity: 0.72;
   }
 }
 
@@ -2395,7 +2430,7 @@ body {
 .edgeBusinessInfoButton {
   position: fixed;
   left: 12px;
-  top: calc(50% - 84px);
+  top: calc(50% - 176px);
   transform: translateY(-50%);
   width: 58px;
   height: 58px;
@@ -2426,6 +2461,42 @@ body {
 .edgeBusinessInfoButton svg {
   width: 46px;
   height: 46px;
+}
+
+.edgeShopButton {
+  position: fixed;
+  left: 12px;
+  top: calc(50% - 84px);
+  transform: translateY(-50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 35;
+}
+
+.edgeShopButton:hover {
+  background: transparent;
+}
+
+.edgeShopButton:active {
+  transform: translateY(-50%) scale(0.97);
+}
+
+.edgeShopButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.edgeShopButton svg {
+  width: 42px;
+  height: 42px;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.26));
 }
 
 .edgeGardenButton {
@@ -3737,7 +3808,7 @@ body.inventoryDragActive {
   }
 
   .edgeBusinessInfoButton {
-    top: calc(50% - 72px);
+    top: calc(50% - 160px);
     width: 52px;
     height: 52px;
   }
@@ -3745,6 +3816,17 @@ body.inventoryDragActive {
   .edgeBusinessInfoButton svg {
     width: 42px;
     height: 42px;
+  }
+
+  .edgeShopButton {
+    top: calc(50% - 72px);
+    width: 52px;
+    height: 52px;
+  }
+
+  .edgeShopButton svg {
+    width: 40px;
+    height: 40px;
   }
 
   .edgeRouletteButton svg {
@@ -3967,6 +4049,145 @@ body.inventoryDragActive {
 .mailActionPrimary:disabled,
 .businessLeaveButton:disabled,
 .businessSecondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.shopPanelOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--topbar-total-height) + 10px) 12px calc(var(--tabbar-total-height) + 12px);
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(12px);
+}
+
+.shopPanel {
+  width: min(100%, 520px);
+  max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 22px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 24px;
+  border: 1px solid var(--line-strong);
+  background: rgba(4, 4, 4, 0.96);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.shopPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shopPanelHeader h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.shopPanelHint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.shopList {
+  display: grid;
+  gap: 12px;
+}
+
+.shopCard {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 46%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.shopCardArt {
+  display: grid;
+  place-items: center;
+  min-height: 132px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.shopCardImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shopCardBody {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.shopCardTitleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shopCardTitle {
+  font-size: 20px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.shopCardPrice {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.94);
+  white-space: nowrap;
+}
+
+.shopCardDescription {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.shopBuyButton {
+  appearance: none;
+  width: 100%;
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shopBuyButton:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+}
+
+.shopBuyButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -4279,6 +4500,13 @@ body.inventoryDragActive {
       calc(var(--tabbar-total-height) + 10px);
   }
 
+  .shopPanelOverlay {
+    padding:
+      calc(var(--topbar-total-height) + 8px)
+      10px
+      calc(var(--tabbar-total-height) + 10px);
+  }
+
   .leadersPanelOverlay {
     padding:
       calc(var(--topbar-total-height) + 8px)
@@ -4287,6 +4515,12 @@ body.inventoryDragActive {
   }
 
   .mailPanel {
+    width: 100%;
+    max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 18px);
+    padding: 16px;
+  }
+
+  .shopPanel {
     width: 100%;
     max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 18px);
     padding: 16px;
@@ -4307,9 +4541,18 @@ body.inventoryDragActive {
     grid-template-columns: 1fr;
   }
 
+  .shopCard {
+    grid-template-columns: 1fr;
+  }
+
   .leaderCardTitleRow {
     display: grid;
     gap: 4px;
+  }
+
+  .shopCardTitleRow {
+    display: grid;
+    gap: 6px;
   }
 
   .edgeMailButton {
@@ -4319,6 +4562,17 @@ body.inventoryDragActive {
   }
 
   .edgeMailButton svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  .edgeShopButton {
+    top: calc(50% - 70px);
+    width: 54px;
+    height: 54px;
+  }
+
+  .edgeShopButton svg {
     width: 30px;
     height: 30px;
   }
@@ -4354,6 +4608,13 @@ body.inventoryDragActive {
       calc(var(--tabbar-total-height) + 8px);
   }
 
+  .shopPanelOverlay {
+    padding:
+      calc(var(--topbar-total-height) + 6px)
+      8px
+      calc(var(--tabbar-total-height) + 8px);
+  }
+
   .leadersPanelOverlay {
     padding:
       calc(var(--topbar-total-height) + 6px)
@@ -4362,6 +4623,11 @@ body.inventoryDragActive {
   }
 
   .mailPanel {
+    max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 14px);
+    padding: 14px;
+  }
+
+  .shopPanel {
     max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 14px);
     padding: 14px;
   }
@@ -4378,6 +4644,17 @@ body.inventoryDragActive {
   }
 
   .edgeMailButton svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .edgeShopButton {
+    top: calc(50% - 58px);
+    width: 50px;
+    height: 50px;
+  }
+
+  .edgeShopButton svg {
     width: 28px;
     height: 28px;
   }
