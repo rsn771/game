@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres'
+import { sql, type VercelPoolClient } from '@vercel/postgres'
 import { ensureSchema, ensureUser } from './_lib/db.js'
 import {
   getQueryParam,
@@ -204,7 +204,7 @@ async function loadInbox(userId: string): Promise<MailEntry[]> {
   return [...invites, ...requests].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
 }
 
-async function canReviewJoinRequest(client: Awaited<ReturnType<typeof sql.connect>>, userId: string, ownerUserId: string) {
+async function canReviewJoinRequest(client: VercelPoolClient, userId: string, ownerUserId: string) {
   if (userId === ownerUserId) return true
 
   const { rows } = await client.sql<{ owner_user_id: string }>`
