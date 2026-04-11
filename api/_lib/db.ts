@@ -278,6 +278,19 @@ async function ensureSchemaOnce() {
   `
 
   await query`
+    create table if not exists business_join_requests (
+      id bigserial primary key,
+      owner_user_id text not null references businesses(owner_user_id) on delete cascade,
+      requester_user_id text not null references users(tg_user_id) on delete cascade,
+      reviewed_by_user_id text references users(tg_user_id) on delete set null,
+      status text not null default 'pending',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      check (status in ('pending', 'accepted', 'declined', 'cancelled'))
+    );
+  `
+
+  await query`
     create table if not exists app_meta (
       key text primary key,
       value text not null
@@ -338,6 +351,22 @@ async function ensureSchemaOnce() {
   await query`
     create unique index if not exists business_invites_pending_target_idx
     on business_invites (target_user_id)
+    where status = 'pending';
+  `
+
+  await query`
+    create index if not exists business_join_requests_owner_status_idx
+    on business_join_requests (owner_user_id, status, updated_at desc);
+  `
+
+  await query`
+    create index if not exists business_join_requests_requester_status_idx
+    on business_join_requests (requester_user_id, status, updated_at desc);
+  `
+
+  await query`
+    create unique index if not exists business_join_requests_pending_pair_idx
+    on business_join_requests (owner_user_id, requester_user_id)
     where status = 'pending';
   `
 

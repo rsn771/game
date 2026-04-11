@@ -132,7 +132,8 @@ type BusinessPayload = {
   pendingInvites: BusinessPendingInvite[]
 }
 
-type MailInvite = {
+type MailBusinessInvite = {
+  type: 'invite'
   inviteId: number
   ownerUserId: string
   businessName: string
@@ -145,6 +146,37 @@ type MailInvite = {
   senderUserId: string
   senderUsername: string | null
   senderDisplayName: string | null
+}
+
+type MailJoinRequest = {
+  type: 'join_request'
+  requestId: number
+  ownerUserId: string
+  businessName: string
+  businessDescription: string
+  capital: string
+  requesterUserId: string
+  requesterUsername: string | null
+  requesterDisplayName: string | null
+  openSlots: number
+}
+
+type MailEntry = MailBusinessInvite | MailJoinRequest
+
+type LeaderboardBusiness = {
+  ownerUserId: string
+  businessName: string
+  businessDescription: string
+  capital: string
+  ownerUsername: string | null
+  ownerDisplayName: string | null
+  managerUserId: string | null
+  managerUsername: string | null
+  managerDisplayName: string | null
+  staffCount: number
+  openSlots: number
+  pendingRequest: boolean
+  canRequestJoin: boolean
 }
 
 type PublicUserProfile = {
@@ -1147,6 +1179,23 @@ function MailIcon({ className }: { className?: string }) {
         <path d="m14 22 16.2 12.6a3 3 0 0 0 3.6 0L50 22" />
         <path d="m18 42 10.5-10" opacity="0.72" />
         <path d="m46 42-10.5-10" opacity="0.72" />
+      </g>
+    </svg>
+  )
+}
+
+function LeaderboardIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 52h36" />
+        <path d="M18 52V30" />
+        <path d="M32 52V20" />
+        <path d="M46 52V12" />
+        <rect x="14" y="24" width="8" height="6" rx="2.5" />
+        <rect x="28" y="14" width="8" height="6" rx="2.5" />
+        <rect x="42" y="6" width="8" height="6" rx="2.5" />
+        <path d="M50 16h6M50 24h6M50 32h6" opacity="0.7" />
       </g>
     </svg>
   )
@@ -3179,15 +3228,15 @@ function MailPanel({
 }) {
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [inbox, setInbox] = useState<MailInvite[]>([])
-  const [busyInviteId, setBusyInviteId] = useState<number | null>(null)
+  const [inbox, setInbox] = useState<MailEntry[]>([])
+  const [busyMailKey, setBusyMailKey] = useState<string | null>(null)
 
   const loadInbox = useCallback(async () => {
     setLoading(true)
     try {
       const r = await fetchWithTimeout(`/api/mail?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить почту')
-      const data = (await r.json()) as { inbox?: MailInvite[] }
+      const data = (await r.json()) as { inbox?: MailEntry[] }
       const nextInbox = Array.isArray(data.inbox) ? data.inbox : []
       setInbox(nextInbox)
       onInboxCountChange?.(nextInbox.length)
@@ -3205,35 +3254,40 @@ function MailPanel({
     void loadInbox()
   }, [loadInbox])
 
-  const handleDecision = useCallback(async (inviteId: number, decision: 'accept' | 'decline') => {
-    setBusyInviteId(inviteId)
+  const handleDecision = useCallback(async (
+    body:
+      | { action: 'respond_invite'; inviteId: number; decision: 'accept' | 'decline' }
+      | { action: 'respond_join_request'; requestId: number; decision: 'accept' | 'decline' },
+    busyKey: string,
+    successMessage: string,
+    shouldClose = false,
+  ) => {
+    setBusyMailKey(busyKey)
     setNotice(null)
     try {
       const r = await fetchWithTimeout('/api/mail', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          action: 'respond_invite',
           userId,
-          inviteId,
-          decision,
+          ...body,
         }),
       })
-      const data = (await r.json().catch(() => null)) as { error?: string; inbox?: MailInvite[] } | null
+      const data = (await r.json().catch(() => null)) as { error?: string; inbox?: MailEntry[] } | null
       if (!r.ok) throw new Error(data?.error ?? 'Не удалось обработать письмо')
       const nextInbox = Array.isArray(data?.inbox) ? data.inbox : []
       setInbox(nextInbox)
       onInboxCountChange?.(nextInbox.length)
-      if (decision === 'accept') {
+      if (shouldClose) {
         onBusinessAccepted?.()
         onClose()
         return
       }
-      setNotice('Приглашение отклонено')
+      setNotice(successMessage)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Не удалось обработать письмо')
     } finally {
-      setBusyInviteId(null)
+      setBusyMailKey(null)
     }
   }, [onBusinessAccepted, onClose, onInboxCountChange, userId])
 
@@ -3243,7 +3297,7 @@ function MailPanel({
         <div className="mailPanelHeader">
           <div>
             <h3>Почта</h3>
-            <p className="mailPanelHint">Сюда приходят приглашения в бизнес. Можно вступить или отказаться.</p>
+            <p className="mailPanelHint">Сюда приходят письма. Их можно принять или отклонить.</p>
           </div>
           <button
             type="button"
@@ -3261,42 +3315,110 @@ function MailPanel({
           <div className="friendsEmpty">Загружаем почту...</div>
         ) : inbox.length > 0 ? (
           <div className="mailList">
-            {inbox.map((invite) => {
-              const ownerPreview = {
-                userId: invite.ownerUserId,
-                username: invite.ownerUsername,
-                displayName: invite.ownerDisplayName,
-                relation: 'none' as FriendRelation,
-              }
-              const senderPreview = {
-                userId: invite.senderUserId,
-                username: invite.senderUsername,
-                displayName: invite.senderDisplayName,
-                relation: 'none' as FriendRelation,
+            {inbox.map((entry) => {
+              if (entry.type === 'invite') {
+                const ownerPreview = {
+                  userId: entry.ownerUserId,
+                  username: entry.ownerUsername,
+                  displayName: entry.ownerDisplayName,
+                  relation: 'none' as FriendRelation,
+                }
+                const senderPreview = {
+                  userId: entry.senderUserId,
+                  username: entry.senderUsername,
+                  displayName: entry.senderDisplayName,
+                  relation: 'none' as FriendRelation,
+                }
+                const busyKey = `invite:${entry.inviteId}`
+
+                return (
+                  <article key={busyKey} className="mailCard">
+                    <div className="mailCardEyebrow">Приглашение</div>
+                    <div className="mailCardTitle">{entry.businessName}</div>
+                    <p className="mailCardDescription">{entry.businessDescription || 'Описание появится позже.'}</p>
+
+                    <div className="mailMetaGrid">
+                      <div className="mailMetaItem">
+                        <span>Владелец</span>
+                        <strong>{getUserPrimaryLabel(ownerPreview)}</strong>
+                      </div>
+                      <div className="mailMetaItem">
+                        <span>Отправитель</span>
+                        <strong>{getUserPrimaryLabel(senderPreview)}</strong>
+                      </div>
+                      <div className="mailMetaItem">
+                        <span>Должность</span>
+                        <strong>{entry.roleName}</strong>
+                      </div>
+                      <div className="mailMetaItem">
+                        <span>Капитал</span>
+                        <strong>{formatStars(entry.capital)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="mailActions">
+                      <button
+                        type="button"
+                        className="mailActionSecondary"
+                        onClick={() => void handleDecision(
+                          { action: 'respond_invite', inviteId: entry.inviteId, decision: 'decline' },
+                          busyKey,
+                          'Приглашение отклонено',
+                        )}
+                        disabled={busyMailKey === busyKey}
+                      >
+                        {busyMailKey === busyKey ? 'Обрабатываем...' : 'Отказаться'}
+                      </button>
+                      <button
+                        type="button"
+                        className="mailActionPrimary"
+                        onClick={() => void handleDecision(
+                          { action: 'respond_invite', inviteId: entry.inviteId, decision: 'accept' },
+                          busyKey,
+                          '',
+                          true,
+                        )}
+                        disabled={busyMailKey === busyKey}
+                      >
+                        {busyMailKey === busyKey ? 'Обрабатываем...' : 'Вступить'}
+                      </button>
+                    </div>
+                  </article>
+                )
               }
 
+              const requesterPreview = {
+                userId: entry.requesterUserId,
+                username: entry.requesterUsername,
+                displayName: entry.requesterDisplayName,
+                relation: 'none' as FriendRelation,
+              }
+              const busyKey = `request:${entry.requestId}`
+
               return (
-                <article key={invite.inviteId} className="mailCard">
-                  <div className="mailCardEyebrow">Приглашение в бизнес</div>
-                  <div className="mailCardTitle">{invite.businessName}</div>
-                  <p className="mailCardDescription">{invite.businessDescription || 'Описание бизнеса появится позже.'}</p>
+                <article key={busyKey} className="mailCard">
+                  <div className="mailCardEyebrow">Заявка на вступление</div>
+                  <div className="mailCardTitle">{getUserPrimaryLabel(requesterPreview)}</div>
+                  <p className="mailCardDescription">
+                    Хочет вступить в «{entry.businessName}». {entry.businessDescription || 'Описание появится позже.'}
+                  </p>
 
                   <div className="mailMetaGrid">
                     <div className="mailMetaItem">
-                      <span>Владелец</span>
-                      <strong>{getUserPrimaryLabel(ownerPreview)}</strong>
+                      <span>Бизнес</span>
+                      <strong>{entry.businessName}</strong>
                     </div>
                     <div className="mailMetaItem">
-                      <span>Отправитель</span>
-                      <strong>{getUserPrimaryLabel(senderPreview)}</strong>
-                    </div>
-                    <div className="mailMetaItem">
-                      <span>Должность</span>
-                      <strong>{invite.roleName}</strong>
+                      <span>Свободные места</span>
+                      <strong>{entry.openSlots}</strong>
                     </div>
                     <div className="mailMetaItem">
                       <span>Капитал</span>
-                      <strong>{formatStars(invite.capital)}</strong>
+                      <strong>{formatStars(entry.capital)}</strong>
+                    </div>
+                    <div className="mailMetaItem">
+                      <span>Профиль</span>
+                      <strong>{getUserSecondaryLabel(requesterPreview)}</strong>
                     </div>
                   </div>
 
@@ -3304,18 +3426,26 @@ function MailPanel({
                     <button
                       type="button"
                       className="mailActionSecondary"
-                      onClick={() => void handleDecision(invite.inviteId, 'decline')}
-                      disabled={busyInviteId === invite.inviteId}
+                      onClick={() => void handleDecision(
+                        { action: 'respond_join_request', requestId: entry.requestId, decision: 'decline' },
+                        busyKey,
+                        'Заявка отклонена',
+                      )}
+                      disabled={busyMailKey === busyKey}
                     >
-                      {busyInviteId === invite.inviteId ? 'Обрабатываем...' : 'Отказаться'}
+                      {busyMailKey === busyKey ? 'Обрабатываем...' : 'Отклонить'}
                     </button>
                     <button
                       type="button"
                       className="mailActionPrimary"
-                      onClick={() => void handleDecision(invite.inviteId, 'accept')}
-                      disabled={busyInviteId === invite.inviteId}
+                      onClick={() => void handleDecision(
+                        { action: 'respond_join_request', requestId: entry.requestId, decision: 'accept' },
+                        busyKey,
+                        'Заявка одобрена',
+                      )}
+                      disabled={busyMailKey === busyKey}
                     >
-                      {busyInviteId === invite.inviteId ? 'Обрабатываем...' : 'Вступить'}
+                      {busyMailKey === busyKey ? 'Обрабатываем...' : 'Принять'}
                     </button>
                   </div>
                 </article>
@@ -3323,7 +3453,206 @@ function MailPanel({
             })}
           </div>
         ) : (
-          <div className="friendsEmpty">Почта пока пустая. Новые приглашения в бизнес появятся здесь.</div>
+          <div className="friendsEmpty">Почта пока пустая.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LeadersPanel({
+  userId,
+  onClose,
+}: {
+  userId: string
+  onClose: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [items, setItems] = useState<LeaderboardBusiness[]>([])
+  const [selectedOwnerUserId, setSelectedOwnerUserId] = useState<string | null>(null)
+  const [busyOwnerUserId, setBusyOwnerUserId] = useState<string | null>(null)
+
+  const loadLeaders = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetchWithTimeout(`/api/leaderboard?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) throw new Error('Не удалось загрузить список лидеров')
+      const data = (await r.json()) as { items?: LeaderboardBusiness[] }
+      setItems(Array.isArray(data.items) ? data.items : [])
+      setNotice(null)
+    } catch (error) {
+      setItems([])
+      setNotice(error instanceof Error ? error.message : 'Не удалось загрузить список лидеров')
+    } finally {
+      setLoading(false)
+    }
+  }, [userId])
+
+  useEffect(() => {
+    void loadLeaders()
+  }, [loadLeaders])
+
+  const selectedBusiness = useMemo(
+    () => items.find((item) => item.ownerUserId === selectedOwnerUserId) ?? null,
+    [items, selectedOwnerUserId],
+  )
+
+  const handleApply = useCallback(async (ownerUserId: string) => {
+    setBusyOwnerUserId(ownerUserId)
+    setNotice(null)
+    try {
+      const r = await fetchWithTimeout('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request_join',
+          userId,
+          ownerUserId,
+        }),
+      })
+      const data = (await r.json().catch(() => null)) as { error?: string; items?: LeaderboardBusiness[] } | null
+      if (!r.ok) throw new Error(data?.error ?? 'Не удалось отправить заявку')
+      const nextItems = Array.isArray(data?.items) ? data.items : items.map((item) => (
+        item.ownerUserId === ownerUserId ? { ...item, pendingRequest: true } : item
+      ))
+      setItems(nextItems)
+      setNotice('Заявка отправлена')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Не удалось отправить заявку')
+    } finally {
+      setBusyOwnerUserId(null)
+    }
+  }, [items, userId])
+
+  const renderApplyButton = (item: LeaderboardBusiness) => {
+    const isBusy = busyOwnerUserId === item.ownerUserId
+    const isDisabled = isBusy || item.pendingRequest || !item.canRequestJoin
+    let label = 'Отправить заявку'
+
+    if (item.pendingRequest) {
+      label = 'Заявка отправлена'
+    } else if (item.openSlots <= 0) {
+      label = 'Нет свободных мест'
+    } else if (!item.canRequestJoin) {
+      label = 'Недоступно'
+    }
+
+    return (
+      <button
+        type="button"
+        className="mailActionPrimary"
+        onClick={() => void handleApply(item.ownerUserId)}
+        disabled={isDisabled}
+      >
+        {isBusy ? 'Отправляем...' : label}
+      </button>
+    )
+  }
+
+  return (
+    <div className="leadersPanelOverlay" onClick={onClose}>
+      <div className="leadersPanel" onClick={(e) => e.stopPropagation()}>
+        <div className="leadersPanelHeader">
+          <div>
+            <h3>{selectedBusiness ? selectedBusiness.businessName : 'Лидеры бизнеса'}</h3>
+            <p className="leadersPanelHint">
+              {selectedBusiness
+                ? 'Смотрите детали бизнеса и подавайте заявку на вступление.'
+                : 'Здесь собраны все бизнесы по капиталу, от самого большого к меньшему.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="friendTransferClose"
+            onClick={onClose}
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+
+        {notice && <div className="businessNotice">{notice}</div>}
+
+        {loading ? (
+          <div className="friendsEmpty">Загружаем список лидеров...</div>
+        ) : selectedBusiness ? (
+          <div className="leaderDetail">
+            <button
+              type="button"
+              className="businessSecondaryButton leaderBackButton"
+              onClick={() => setSelectedOwnerUserId(null)}
+            >
+              Назад к списку
+            </button>
+
+            <div className="leaderDetailCard">
+              <div className="mailCardEyebrow">Бизнес</div>
+              <div className="mailCardTitle">{selectedBusiness.businessName}</div>
+              <p className="mailCardDescription">
+                {selectedBusiness.businessDescription || 'Описание появится позже.'}
+              </p>
+
+              <div className="mailMetaGrid">
+                <div className="mailMetaItem">
+                  <span>Владелец</span>
+                  <strong>{getUserPrimaryLabel({
+                    userId: selectedBusiness.ownerUserId,
+                    username: selectedBusiness.ownerUsername,
+                    displayName: selectedBusiness.ownerDisplayName,
+                  })}</strong>
+                </div>
+                <div className="mailMetaItem">
+                  <span>Управляющий</span>
+                  <strong>{selectedBusiness.managerUserId ? getUserPrimaryLabel({
+                    userId: selectedBusiness.managerUserId,
+                    username: selectedBusiness.managerUsername,
+                    displayName: selectedBusiness.managerDisplayName,
+                  }) : 'Пока не назначен'}</strong>
+                </div>
+                <div className="mailMetaItem">
+                  <span>Капитал</span>
+                  <strong>{formatStars(selectedBusiness.capital)}</strong>
+                </div>
+                <div className="mailMetaItem">
+                  <span>Команда</span>
+                  <strong>{selectedBusiness.staffCount}/{BUSINESS_SLOT_COUNT}</strong>
+                </div>
+              </div>
+
+              <div className="leaderDetailActions">
+                {renderApplyButton(selectedBusiness)}
+              </div>
+            </div>
+          </div>
+        ) : items.length > 0 ? (
+          <div className="leadersList">
+            {items.map((item, index) => (
+              <button
+                key={item.ownerUserId}
+                type="button"
+                className="leaderCard"
+                onClick={() => setSelectedOwnerUserId(item.ownerUserId)}
+              >
+                <div className="leaderCardRank">#{index + 1}</div>
+                <div className="leaderCardMain">
+                  <div className="leaderCardTitleRow">
+                    <span className="leaderCardTitle">{item.businessName}</span>
+                    <span className="leaderCardCapital">{formatStars(item.capital)}</span>
+                  </div>
+                  <p className="leaderCardDescription">
+                    {item.businessDescription || 'Описание появится позже.'}
+                  </p>
+                  <div className="leaderCardMeta">
+                    <span>{item.staffCount}/{BUSINESS_SLOT_COUNT} сотрудников</span>
+                    <span>{item.openSlots} свободно</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="friendsEmpty">Пока нет открытых бизнесов.</div>
         )}
       </div>
     </div>
@@ -3991,6 +4320,7 @@ function App() {
   const [isSlotsOpen, setIsSlotsOpen] = useState(false)
   const [isClickerOpen, setIsClickerOpen] = useState(false)
   const [isMailOpen, setIsMailOpen] = useState(false)
+  const [isLeadersOpen, setIsLeadersOpen] = useState(false)
   const [mailInboxCount, setMailInboxCount] = useState(0)
   const [isApartmentThemeOpen, setIsApartmentThemeOpen] = useState(false)
   const [packClicks, setPackClicks] = useState(0)
@@ -4240,7 +4570,7 @@ function App() {
     try {
       const r = await fetchWithTimeout(`/api/mail?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить почту')
-      const data = (await r.json()) as { inbox?: MailInvite[] }
+      const data = (await r.json()) as { inbox?: MailEntry[] }
       setMailInboxCount(Array.isArray(data.inbox) ? data.inbox.length : 0)
     } catch {
       setMailInboxCount(0)
@@ -4492,6 +4822,14 @@ function App() {
                 <span className="edgeMailBadge">{mailInboxCount > 9 ? '9+' : mailInboxCount}</span>
               )}
             </button>
+            <button
+              type="button"
+              className="edgeLeaderboardButton"
+              aria-label="Лидеры бизнеса"
+              onClick={() => setIsLeadersOpen(true)}
+            >
+              <LeaderboardIcon />
+            </button>
             {businessMode === 'employee' && businessProfile && (
               <button
                 type="button"
@@ -4708,6 +5046,13 @@ function App() {
             void loadBusinessStatus()
             setTab('business')
           }}
+        />
+      )}
+
+      {isLeadersOpen && (
+        <LeadersPanel
+          userId={userId}
+          onClose={() => setIsLeadersOpen(false)}
         />
       )}
 
