@@ -289,7 +289,7 @@ const HOME_BACKGROUNDS: HomeBackgroundDef[] = [
     id: 'skyline_studio',
     name: 'Ночная skyline-студия',
     description: 'Студия с панорамным skyline, живыми огнями города и ночной атмосферой.',
-    imageSrc: '/home-bg-skyline-studio.svg',
+    imageSrc: '/home-bg-apartment-skyline.svg',
     requiredCardId: SKYLINE_STUDIO_CARD_ID,
   },
 ]
@@ -366,7 +366,7 @@ const PACK_CARDS: CardDef[] = [
 
 const ALL_CARDS: CardDef[] = [
   { id: APARTMENT_CARD_ID, name: 'Квартира', imageSrc: '/home-bg-apartment-sunrise.svg' },
-  { id: SKYLINE_STUDIO_CARD_ID, name: 'Ночная skyline-студия', imageSrc: '/home-bg-skyline-studio.svg' },
+  { id: SKYLINE_STUDIO_CARD_ID, name: 'Ночная skyline-студия', imageSrc: '/home-bg-apartment-skyline.svg' },
   ...PACK_CARDS,
   { id: 'rose_2red', name: '2 красные розы', imageSrc: '/card-rose-2red.png' },
   { id: 'rose_bouquet', name: 'Букет красных роз', imageSrc: '/card-rose-bouquet.png' },
@@ -3814,7 +3814,7 @@ function ShopPanel({
 
           <article className="shopCard">
             <div className="shopCardArt" aria-hidden="true">
-              <img className="shopCardImg" src="/home-bg-skyline-studio.svg" alt="" />
+              <img className="shopCardImg" src="/home-bg-apartment-skyline.svg" alt="" />
             </div>
             <div className="shopCardBody">
               <div className="shopCardTitleRow">

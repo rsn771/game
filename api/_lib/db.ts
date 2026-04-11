@@ -59,7 +59,7 @@ async function seedCards(query: SqlRunner) {
 
   await query`
     insert into cards (id, name, image_src)
-    values ('asset_skyline_studio', 'Ночная skyline-студия', '/home-bg-skyline-studio.svg')
+    values ('asset_skyline_studio', 'Ночная skyline-студия', '/home-bg-apartment-skyline.svg')
     on conflict (id) do update
     set name = excluded.name,
         image_src = excluded.image_src;
