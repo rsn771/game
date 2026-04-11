@@ -2403,14 +2403,43 @@ const CUSTOMIZE_CATEGORIES: CustomizeCategoryDef[] = [
   },
 ]
 
+function loadCustomizeCategory(userId: string): CustomizeCategoryId {
+  try {
+    const raw = localStorage.getItem(`customize_category_${userId}`)
+    return CUSTOMIZE_CATEGORIES.some((category) => category.id === raw)
+      ? (raw as CustomizeCategoryId)
+      : 'pose'
+  } catch {
+    return 'pose'
+  }
+}
+
+function saveCustomizeCategory(userId: string, categoryId: CustomizeCategoryId) {
+  try {
+    localStorage.setItem(`customize_category_${userId}`, categoryId)
+  } catch {
+    // ignore
+  }
+}
+
 function CustomizePanel({
+  userId,
   selectedAvatarModelId,
   onSelectAvatarModel,
 }: {
+  userId: string
   selectedAvatarModelId: AvatarModelId
   onSelectAvatarModel: (modelId: AvatarModelId) => void
 }) {
-  const [activeCategoryId, setActiveCategoryId] = useState<CustomizeCategoryId>('pose')
+  const [activeCategoryId, setActiveCategoryId] = useState<CustomizeCategoryId>(() => loadCustomizeCategory(userId))
+
+  useEffect(() => {
+    setActiveCategoryId(loadCustomizeCategory(userId))
+  }, [userId])
+
+  useEffect(() => {
+    saveCustomizeCategory(userId, activeCategoryId)
+  }, [activeCategoryId, userId])
   const activeCategory = CUSTOMIZE_CATEGORIES.find((category) => category.id === activeCategoryId) ?? CUSTOMIZE_CATEGORIES[0]
   const selectedAvatarModel = getAvatarModelById(selectedAvatarModelId)
   const showModelPicker = activeCategory.id === 'build'
@@ -3728,6 +3757,7 @@ function App() {
           previousUserId,
           username: telegramIdentity.username,
           displayName: telegramIdentity.displayName,
+          avatarModel: selectedAvatarModelId,
         }),
       })
       if (!r.ok) return
@@ -3742,7 +3772,7 @@ function App() {
     } catch {
       setStars(fallbackStars)
     }
-  }, [telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const handleSelectAvatarModel = useCallback((modelId: AvatarModelId) => {
     setSelectedAvatarModelId(modelId)
@@ -4157,6 +4187,7 @@ function App() {
 
         {tab === 'customize' && (
           <CustomizePanel
+            userId={userId}
             selectedAvatarModelId={selectedAvatarModelId}
             onSelectAvatarModel={handleSelectAvatarModel}
           />

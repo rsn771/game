@@ -374,7 +374,7 @@ export async function upsertUserProfile(input: UserProfileInput) {
     on conflict (tg_user_id) do update
     set username = coalesce(excluded.username, users.username),
         display_name = coalesce(excluded.display_name, users.display_name),
-        avatar_model = coalesce(excluded.avatar_model, users.avatar_model),
+        avatar_model = coalesce(${avatarModel}, users.avatar_model),
         updated_at = now();
   `
 }

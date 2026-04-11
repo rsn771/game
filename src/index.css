@@ -51,7 +51,8 @@
 .friendProfileModal {
   width: min(94vw, 440px);
   max-height: min(88dvh, 860px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: grid;
   gap: 14px;
   border-radius: 28px;
@@ -61,6 +62,9 @@
     rgba(6, 6, 6, 0.96);
   box-shadow: 0 28px 64px rgba(0, 0, 0, 0.48);
   padding: 18px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .friendProfileHeader {
@@ -191,6 +195,7 @@
 
 @media (max-width: 640px) {
   .friendProfileOverlay {
+    place-items: stretch center;
     align-items: end;
     padding:
       calc(var(--safe-top) + 10px)
@@ -199,15 +204,22 @@
   }
 
   .friendProfileModal {
-    width: min(100%, 420px);
-    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px);
+    width: 100%;
+    max-width: none;
+    height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px);
+    max-height: none;
     gap: 12px;
-    padding: 14px;
+    padding: 14px 14px calc(var(--safe-bottom) + 18px);
     border-radius: 24px 24px 22px 22px;
   }
 
   .friendProfileHeader {
     gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding-bottom: 2px;
+    background: linear-gradient(180deg, rgba(6, 6, 6, 0.98), rgba(6, 6, 6, 0.78) 76%, transparent);
   }
 
   .friendProfileHeader h3 {
@@ -221,7 +233,7 @@
 
   .friendProfileStage,
   .friendProfileAvatarWrap {
-    min-height: 250px;
+    min-height: clamp(390px, 60dvh, 620px);
   }
 
   .friendProfileStage {
@@ -229,11 +241,11 @@
   }
 
   .friendProfileAvatarWrap {
-    padding: 18px 14px 0;
+    padding: 26px 16px 0;
   }
 
   .friendProfileAvatarWrap .stickman {
-    width: min(50vw, 174px);
+    width: min(60vw, 214px);
   }
 
   .friendProfileGrid {
@@ -287,8 +299,8 @@
   }
 
   .friendProfileModal {
-    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 16px);
-    padding: 12px;
+    height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 16px);
+    padding: 12px 12px calc(var(--safe-bottom) + 16px);
     border-radius: 22px 22px 20px 20px;
   }
 
@@ -298,15 +310,15 @@
 
   .friendProfileStage,
   .friendProfileAvatarWrap {
-    min-height: 224px;
+    min-height: clamp(360px, 57dvh, 560px);
   }
 
   .friendProfileAvatarWrap {
-    padding: 14px 10px 0;
+    padding: 22px 12px 0;
   }
 
   .friendProfileAvatarWrap .stickman {
-    width: min(52vw, 156px);
+    width: min(64vw, 198px);
   }
 
   .friendProfileEyebrow {
