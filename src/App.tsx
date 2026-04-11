@@ -4990,21 +4990,6 @@ function App() {
                       ))}
                     </div>
                   )}
-                  {activeHomeBackground.id === 'skyline_studio' && (
-                    <div className="homeSkylineLights" aria-hidden="true">
-                      {Array.from({ length: 14 }).map((_, index) => (
-                        <span
-                          key={index}
-                          className="homeSkylineLight"
-                          style={{
-                            left: `${18 + index * 5.2}%`,
-                            top: `${18 + (index % 5) * 6}%`,
-                            animationDelay: `${index * 0.18}s`,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
                   <div className="homeBackdropShade" aria-hidden="true" />
                 </>
               )}

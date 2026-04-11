@@ -480,25 +480,6 @@ body {
   animation: home-night-twinkle 2.2s ease-in-out infinite;
 }
 
-.homeSkylineLights {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.homeSkylineLight {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 223, 162, 0.96);
-  box-shadow:
-    0 0 10px rgba(255, 212, 132, 0.62),
-    0 0 20px rgba(120, 180, 255, 0.2);
-  animation: home-skyline-pulse 2.8s ease-in-out infinite;
-}
-
 @keyframes home-night-twinkle {
   0%,
   100% {
@@ -512,22 +493,6 @@ body {
   72% {
     transform: scale(0.92);
     opacity: 0.34;
-  }
-}
-
-@keyframes home-skyline-pulse {
-  0%,
-  100% {
-    transform: scale(0.8);
-    opacity: 0.46;
-  }
-  44% {
-    transform: scale(1.08);
-    opacity: 0.96;
-  }
-  68% {
-    transform: scale(1.16);
-    opacity: 0.72;
   }
 }
 
