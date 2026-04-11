@@ -3809,3 +3809,354 @@ body.inventoryDragActive {
     line-height: 1.05;
   }
 }
+
+
+.friendProfileOverlay {
+  z-index: 9999;
+}
+
+.mailPanelOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--topbar-total-height) + 10px) 12px calc(var(--tabbar-total-height) + 12px);
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(12px);
+}
+
+.mailPanel {
+  width: min(100%, 520px);
+  max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 22px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 24px;
+  border: 1px solid var(--line-strong);
+  background: rgba(4, 4, 4, 0.96);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.mailPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mailPanelHeader h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.mailPanelHint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mailList {
+  display: grid;
+  gap: 12px;
+}
+
+.mailCard {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 46%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.mailCardEyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.mailCardTitle {
+  font-size: 20px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mailCardDescription {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mailMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mailMetaItem {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mailMetaItem span {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.mailMetaItem strong {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.mailActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mailActionSecondary,
+.mailActionPrimary,
+.businessLeaveButton,
+.businessSecondaryButton {
+  appearance: none;
+  width: 100%;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mailActionSecondary,
+.businessSecondaryButton,
+.businessLeaveButton {
+  border: 1px solid var(--line);
+  background: var(--btn-bg);
+  color: var(--fg);
+}
+
+.mailActionPrimary {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  color: var(--fg);
+}
+
+.mailActionSecondary:hover,
+.businessSecondaryButton:hover,
+.businessLeaveButton:hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--line-strong);
+}
+
+.mailActionPrimary:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+}
+
+.mailActionSecondary:disabled,
+.mailActionPrimary:disabled,
+.businessLeaveButton:disabled,
+.businessSecondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.businessRolePill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.businessSlot.hasPendingInvite {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.businessSlotPending {
+  display: grid;
+  gap: 4px;
+}
+
+.businessSlotPendingName {
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.businessSlotPendingNote {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.businessPickerInviteCard {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.businessPickerInviteLabel {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.edgeMailButton {
+  position: fixed;
+  left: 12px;
+  top: calc(50% + 12px);
+  transform: translateY(-50%);
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 35;
+  backdrop-filter: blur(8px);
+}
+
+.edgeMailButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.edgeMailButton:active {
+  transform: translateY(-50%) scale(0.97);
+}
+
+.edgeMailButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.edgeMailButton svg {
+  width: 34px;
+  height: 34px;
+}
+
+.edgeMailBadge {
+  position: absolute;
+  top: -4px;
+  right: -2px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.96);
+  color: #070707;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .friendProfileOverlay {
+    padding:
+      calc(var(--topbar-total-height) + 8px)
+      10px
+      calc(var(--tabbar-total-height) + 10px);
+    align-items: stretch;
+  }
+
+  .friendProfileModal {
+    height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 18px);
+    max-height: none;
+  }
+
+  .mailPanelOverlay {
+    padding:
+      calc(var(--topbar-total-height) + 8px)
+      10px
+      calc(var(--tabbar-total-height) + 10px);
+  }
+
+  .mailPanel {
+    width: 100%;
+    max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 18px);
+    padding: 16px;
+  }
+
+  .mailMetaGrid,
+  .mailActions {
+    grid-template-columns: 1fr;
+  }
+
+  .edgeMailButton {
+    top: calc(50% + 8px);
+    width: 54px;
+    height: 54px;
+  }
+
+  .edgeMailButton svg {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 420px) {
+  .friendProfileOverlay {
+    padding:
+      calc(var(--topbar-total-height) + 6px)
+      8px
+      calc(var(--tabbar-total-height) + 8px);
+  }
+
+  .friendProfileModal {
+    height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 14px);
+  }
+
+  .mailPanelOverlay {
+    padding:
+      calc(var(--topbar-total-height) + 6px)
+      8px
+      calc(var(--tabbar-total-height) + 8px);
+  }
+
+  .mailPanel {
+    max-height: calc(100dvh - var(--topbar-total-height) - var(--tabbar-total-height) - 14px);
+    padding: 14px;
+  }
+
+  .edgeMailButton {
+    top: calc(50% + 2px);
+    width: 50px;
+    height: 50px;
+  }
+
+  .edgeMailButton svg {
+    width: 28px;
+    height: 28px;
+  }
+}

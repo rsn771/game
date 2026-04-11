@@ -104,6 +104,23 @@ type BusinessAssignment = {
   roleName: string
 }
 
+type BusinessPermissions = {
+  canManageStaff: boolean
+  canEditBusiness: boolean
+}
+
+type BusinessPendingInvite = {
+  inviteId: number
+  slotIndex: number
+  roleName: string
+  targetUserId: string
+  username: string | null
+  displayName: string | null
+  senderUserId: string
+  senderUsername: string | null
+  senderDisplayName: string | null
+}
+
 type BusinessPayload = {
   mode: BusinessMode
   business: BusinessProfile | null
@@ -111,6 +128,23 @@ type BusinessPayload = {
   owner: BusinessOwnerPreview | null
   staff: BusinessStaffSlot[]
   assignment: BusinessAssignment | null
+  permissions: BusinessPermissions
+  pendingInvites: BusinessPendingInvite[]
+}
+
+type MailInvite = {
+  inviteId: number
+  ownerUserId: string
+  businessName: string
+  businessDescription: string
+  capital: string
+  slotIndex: number
+  roleName: string
+  ownerUsername: string | null
+  ownerDisplayName: string | null
+  senderUserId: string
+  senderUsername: string | null
+  senderDisplayName: string | null
 }
 
 type PublicUserProfile = {
@@ -651,6 +685,78 @@ function normalizeBusinessStaff(staff: unknown): BusinessStaffSlot[] {
   return createEmptyBusinessStaff().map((slot) => byIndex.get(slot.slotIndex) ?? slot)
 }
 
+function normalizeBusinessPermissions(permissions: unknown, ownerFallback = false): BusinessPermissions {
+  if (!permissions || typeof permissions !== 'object') {
+    return {
+      canManageStaff: ownerFallback,
+      canEditBusiness: ownerFallback,
+    }
+  }
+
+  const candidate = permissions as Partial<BusinessPermissions>
+  return {
+    canManageStaff: candidate.canManageStaff === true || ownerFallback,
+    canEditBusiness: candidate.canEditBusiness === true || ownerFallback,
+  }
+}
+
+function normalizeBusinessPendingInvites(invites: unknown): BusinessPendingInvite[] {
+  if (!Array.isArray(invites)) return []
+
+  return invites.flatMap((invite) => {
+    if (!invite || typeof invite !== 'object') return []
+    const candidate = invite as Partial<BusinessPendingInvite>
+    const inviteId = Number(candidate.inviteId)
+    const slotIndex = Number(candidate.slotIndex)
+    const targetUserId = typeof candidate.targetUserId === 'string' ? candidate.targetUserId.trim() : ''
+
+    if (!Number.isInteger(inviteId) || inviteId <= 0 || !Number.isInteger(slotIndex) || slotIndex < 0 || !targetUserId) {
+      return []
+    }
+
+    return [{
+      inviteId,
+      slotIndex,
+      roleName: typeof candidate.roleName === 'string' && candidate.roleName.trim().length > 0
+        ? candidate.roleName.trim()
+        : getDefaultBusinessRole(slotIndex),
+      targetUserId,
+      username: typeof candidate.username === 'string' && candidate.username.trim().length > 0 ? candidate.username : null,
+      displayName: typeof candidate.displayName === 'string' && candidate.displayName.trim().length > 0 ? candidate.displayName : null,
+      senderUserId: typeof candidate.senderUserId === 'string' && candidate.senderUserId.trim().length > 0 ? candidate.senderUserId : '',
+      senderUsername: typeof candidate.senderUsername === 'string' && candidate.senderUsername.trim().length > 0 ? candidate.senderUsername : null,
+      senderDisplayName: typeof candidate.senderDisplayName === 'string' && candidate.senderDisplayName.trim().length > 0 ? candidate.senderDisplayName : null,
+    }]
+  })
+}
+
+function normalizeBusinessPayload(
+  userId: string,
+  payload: Partial<BusinessPayload> | null | undefined,
+  fallbackBusiness: BusinessProfile | null,
+): BusinessPayload {
+  const business = payload?.business ?? fallbackBusiness ?? null
+  const mode = payload?.mode ?? (business ? 'owner' : 'none')
+  const owner = payload?.owner ?? (business
+    ? {
+        userId,
+        username: null,
+        displayName: null,
+      }
+    : null)
+
+  return {
+    mode,
+    business,
+    stars: typeof payload?.stars === 'string' ? payload.stars : undefined,
+    owner,
+    staff: normalizeBusinessStaff(payload?.staff),
+    assignment: payload?.assignment ?? null,
+    permissions: normalizeBusinessPermissions(payload?.permissions, mode === 'owner' && Boolean(business)),
+    pendingInvites: normalizeBusinessPendingInvites(payload?.pendingInvites),
+  }
+}
+
 function loadLocalBusinessStaff(userId: string): BusinessStaffSlot[] {
   try {
     const raw = localStorage.getItem(`business_staff_${userId}`)
@@ -683,7 +789,7 @@ function saveLocalBusinessStaff(userId: string, staff: BusinessStaffSlot[]) {
 }
 
 function createLocalBusinessPayload(userId: string, business: BusinessProfile | null): BusinessPayload {
-  return {
+  return normalizeBusinessPayload(userId, {
     mode: business ? 'owner' : 'none',
     business,
     stars: getFallbackStars(userId),
@@ -696,7 +802,12 @@ function createLocalBusinessPayload(userId: string, business: BusinessProfile | 
       : null,
     staff: business ? loadLocalBusinessStaff(userId) : createEmptyBusinessStaff(),
     assignment: null,
-  }
+    permissions: {
+      canManageStaff: Boolean(business),
+      canEditBusiness: Boolean(business),
+    },
+    pendingInvites: [],
+  }, business)
 }
 
 function loadBusinessTeam(userId: string): BusinessTeamState {
@@ -760,22 +871,11 @@ async function restoreBusinessFromLocal(userId: string, business: BusinessProfil
 
     if (!r.ok) return null
 
-    return {
-      mode: data?.mode ?? 'owner',
-      business: data?.business ?? {
-        name: business.name,
-        description: business.description,
-        capital: String(BUSINESS_START_CAPITAL),
-      },
-      stars: typeof data?.stars === 'string' ? data.stars : undefined,
-      owner: data?.owner ?? {
-        userId,
-        username: null,
-        displayName: null,
-      },
-      staff: normalizeBusinessStaff(data?.staff),
-      assignment: data?.assignment ?? null,
-    } satisfies BusinessPayload
+    return normalizeBusinessPayload(userId, data, {
+      name: business.name,
+      description: business.description,
+      capital: String(BUSINESS_START_CAPITAL),
+    })
   } catch {
     return null
   }
@@ -1035,6 +1135,19 @@ function CoinIcon({ className }: { className?: string }) {
       <path d="M26 32h12" fill="none" stroke="#090909" strokeWidth="2.8" strokeLinecap="round" />
       <path d="M32 26v12" fill="none" stroke="#090909" strokeWidth="2.8" strokeLinecap="round" />
       <path d="M22 18c3-2.8 6.8-4 10-4" fill="none" stroke="#ffffff" strokeWidth="2.4" strokeLinecap="round" opacity="0.92" />
+    </svg>
+  )
+}
+
+function MailIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" role="presentation" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="10" y="16" width="44" height="32" rx="8" />
+        <path d="m14 22 16.2 12.6a3 3 0 0 0 3.6 0L50 22" />
+        <path d="m18 42 10.5-10" opacity="0.72" />
+        <path d="m46 42-10.5-10" opacity="0.72" />
+      </g>
     </svg>
   )
 }
@@ -3053,6 +3166,170 @@ function ClickerModal({
   )
 }
 
+function MailPanel({
+  userId,
+  onClose,
+  onInboxCountChange,
+  onBusinessAccepted,
+}: {
+  userId: string
+  onClose: () => void
+  onInboxCountChange?: (count: number) => void
+  onBusinessAccepted?: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [inbox, setInbox] = useState<MailInvite[]>([])
+  const [busyInviteId, setBusyInviteId] = useState<number | null>(null)
+
+  const loadInbox = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetchWithTimeout(`/api/mail?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) throw new Error('Не удалось загрузить почту')
+      const data = (await r.json()) as { inbox?: MailInvite[] }
+      const nextInbox = Array.isArray(data.inbox) ? data.inbox : []
+      setInbox(nextInbox)
+      onInboxCountChange?.(nextInbox.length)
+      setNotice(null)
+    } catch {
+      setInbox([])
+      onInboxCountChange?.(0)
+      setNotice('Не удалось загрузить почту')
+    } finally {
+      setLoading(false)
+    }
+  }, [onInboxCountChange, userId])
+
+  useEffect(() => {
+    void loadInbox()
+  }, [loadInbox])
+
+  const handleDecision = useCallback(async (inviteId: number, decision: 'accept' | 'decline') => {
+    setBusyInviteId(inviteId)
+    setNotice(null)
+    try {
+      const r = await fetchWithTimeout('/api/mail', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'respond_invite',
+          userId,
+          inviteId,
+          decision,
+        }),
+      })
+      const data = (await r.json().catch(() => null)) as { error?: string; inbox?: MailInvite[] } | null
+      if (!r.ok) throw new Error(data?.error ?? 'Не удалось обработать письмо')
+      const nextInbox = Array.isArray(data?.inbox) ? data.inbox : []
+      setInbox(nextInbox)
+      onInboxCountChange?.(nextInbox.length)
+      if (decision === 'accept') {
+        onBusinessAccepted?.()
+        onClose()
+        return
+      }
+      setNotice('Приглашение отклонено')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Не удалось обработать письмо')
+    } finally {
+      setBusyInviteId(null)
+    }
+  }, [onBusinessAccepted, onClose, onInboxCountChange, userId])
+
+  return (
+    <div className="mailPanelOverlay" onClick={onClose}>
+      <div className="mailPanel" onClick={(e) => e.stopPropagation()}>
+        <div className="mailPanelHeader">
+          <div>
+            <h3>Почта</h3>
+            <p className="mailPanelHint">Сюда приходят приглашения в бизнес. Можно вступить или отказаться.</p>
+          </div>
+          <button
+            type="button"
+            className="friendTransferClose"
+            onClick={onClose}
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+
+        {notice && <div className="businessNotice">{notice}</div>}
+
+        {loading ? (
+          <div className="friendsEmpty">Загружаем почту...</div>
+        ) : inbox.length > 0 ? (
+          <div className="mailList">
+            {inbox.map((invite) => {
+              const ownerPreview = {
+                userId: invite.ownerUserId,
+                username: invite.ownerUsername,
+                displayName: invite.ownerDisplayName,
+                relation: 'none' as FriendRelation,
+              }
+              const senderPreview = {
+                userId: invite.senderUserId,
+                username: invite.senderUsername,
+                displayName: invite.senderDisplayName,
+                relation: 'none' as FriendRelation,
+              }
+
+              return (
+                <article key={invite.inviteId} className="mailCard">
+                  <div className="mailCardEyebrow">Приглашение в бизнес</div>
+                  <div className="mailCardTitle">{invite.businessName}</div>
+                  <p className="mailCardDescription">{invite.businessDescription || 'Описание бизнеса появится позже.'}</p>
+
+                  <div className="mailMetaGrid">
+                    <div className="mailMetaItem">
+                      <span>Владелец</span>
+                      <strong>{getUserPrimaryLabel(ownerPreview)}</strong>
+                    </div>
+                    <div className="mailMetaItem">
+                      <span>Отправитель</span>
+                      <strong>{getUserPrimaryLabel(senderPreview)}</strong>
+                    </div>
+                    <div className="mailMetaItem">
+                      <span>Должность</span>
+                      <strong>{invite.roleName}</strong>
+                    </div>
+                    <div className="mailMetaItem">
+                      <span>Капитал</span>
+                      <strong>{formatStars(invite.capital)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="mailActions">
+                    <button
+                      type="button"
+                      className="mailActionSecondary"
+                      onClick={() => void handleDecision(invite.inviteId, 'decline')}
+                      disabled={busyInviteId === invite.inviteId}
+                    >
+                      {busyInviteId === invite.inviteId ? 'Обрабатываем...' : 'Отказаться'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mailActionPrimary"
+                      onClick={() => void handleDecision(invite.inviteId, 'accept')}
+                      disabled={busyInviteId === invite.inviteId}
+                    >
+                      {busyInviteId === invite.inviteId ? 'Обрабатываем...' : 'Вступить'}
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="friendsEmpty">Почта пока пустая. Новые приглашения в бизнес появятся здесь.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function BusinessPanel({
   userId,
   stars,
@@ -3074,6 +3351,8 @@ function BusinessPanel({
   const [business, setBusiness] = useState<BusinessProfile | null>(null)
   const [owner, setOwner] = useState<BusinessOwnerPreview | null>(null)
   const [assignment, setAssignment] = useState<BusinessAssignment | null>(null)
+  const [permissions, setPermissions] = useState<BusinessPermissions>({ canManageStaff: false, canEditBusiness: false })
+  const [pendingInvites, setPendingInvites] = useState<BusinessPendingInvite[]>([])
   const [staff, setStaff] = useState<BusinessStaffSlot[]>(() => loadLocalBusinessStaff(userId))
   const [pickerForSlot, setPickerForSlot] = useState<number | null>(null)
   const [roleDraft, setRoleDraft] = useState('')
@@ -3100,11 +3379,15 @@ function BusinessPanel({
     const nextBusiness = payload.business ?? null
     const nextMode = payload.mode ?? (nextBusiness ? 'owner' : 'none')
     const nextStaff = normalizeBusinessStaff(payload.staff)
+    const nextPermissions = normalizeBusinessPermissions(payload.permissions, nextMode === 'owner' && Boolean(nextBusiness))
+    const nextPendingInvites = normalizeBusinessPendingInvites(payload.pendingInvites)
 
     setMode(nextMode)
     setBusiness(nextBusiness)
     setOwner(payload.owner ?? null)
     setAssignment(payload.assignment ?? null)
+    setPermissions(nextPermissions)
+    setPendingInvites(nextPendingInvites)
     setStaff(nextStaff)
     setBusinessName(nextBusiness?.name ?? '')
     setBusinessDescription(nextBusiness?.description ?? '')
@@ -3121,8 +3404,13 @@ function BusinessPanel({
     }
   })
 
-  const isOwner = mode === 'owner'
   const isEmployee = mode === 'employee'
+  const canManageStaff = permissions.canManageStaff
+  const canEditBusiness = permissions.canEditBusiness
+  const pendingInviteBySlot = useMemo(
+    () => new Map(pendingInvites.map((invite) => [invite.slotIndex, invite])),
+    [pendingInvites],
+  )
 
   const loadBusiness = useCallback(async () => {
     setLoadingBusiness(true)
@@ -3135,10 +3423,7 @@ function BusinessPanel({
         const restored = await restoreBusinessFromLocal(userId, localBusiness)
         applyBusinessPayload(restored ?? createLocalBusinessPayload(userId, localBusiness))
       } else {
-        applyBusinessPayload({
-          ...data,
-          staff: normalizeBusinessStaff(data.staff),
-        })
+        applyBusinessPayload(normalizeBusinessPayload(userId, data, localBusiness))
       }
     } catch {
       applyBusinessPayload(createLocalBusinessPayload(userId, localBusiness))
@@ -3152,29 +3437,27 @@ function BusinessPanel({
   }, [loadBusiness])
 
   const loadFriends = useCallback(async () => {
-    if (!business || !isOwner) {
+    if (!business || !canManageStaff) {
       setFriends([])
       return
     }
     setLoadingFriends(true)
     try {
-      const r = await fetch(`/api/friends?userId=${encodeURIComponent(userId)}`)
+      const r = await fetchWithTimeout(`/api/friends?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить друзей')
       const data = (await r.json()) as FriendLists
       setFriends(data.friends ?? [])
-      setNotice(null)
     } catch {
       setFriends([])
-      setNotice('Добавьте друзей, чтобы нанимать сотрудников в бизнес.')
     } finally {
       setLoadingFriends(false)
     }
-  }, [business, isOwner, userId])
+  }, [business, canManageStaff, userId])
 
   useEffect(() => {
-    if (!business || !isOwner) return
+    if (!business || !canManageStaff) return
     void loadFriends()
-  }, [business, isOwner, loadFriends])
+  }, [business, canManageStaff, loadFriends])
 
   const assignedIds = useMemo(
     () => new Set(staff.map((slot) => slot.userId).filter((value): value is string => Boolean(value))),
@@ -3183,108 +3466,107 @@ function BusinessPanel({
 
   const availableFriends = useMemo(() => {
     if (pickerForSlot === null) return []
-    const currentUserId = staff[pickerForSlot]?.userId
-    return friends.filter((friend) => friend.userId === currentUserId || !assignedIds.has(friend.userId))
-  }, [assignedIds, friends, pickerForSlot, staff])
+    return friends.filter((friend) => !assignedIds.has(friend.userId))
+  }, [assignedIds, friends, pickerForSlot])
 
-  const openStaffPicker = useCallback((slotIndex: number) => {
-    if (!isOwner) return
-    setPickerForSlot(slotIndex)
-    setRoleDraft(staff[slotIndex]?.roleName ?? getDefaultBusinessRole(slotIndex))
-  }, [isOwner, staff])
+  const runBusinessAction = useCallback(async (body: Record<string, unknown>, fallbackError: string) => {
+    if (!business && body.action !== 'leave') return null
 
-  const syncStaffSlot = useCallback(async (
-    slotIndex: number,
-    nextEmployee: { userId: string | null; username: string | null; displayName: string | null },
-  ) => {
-    if (!business || !isOwner) return
-
-    const normalizedRole = roleDraft.trim() || getDefaultBusinessRole(slotIndex)
     setSavingBusiness(true)
     setNotice(null)
-
     try {
       const r = await fetchWithTimeout('/api/business', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          action: 'staff',
           userId,
-          slotIndex,
-          employeeUserId: nextEmployee.userId,
-          roleName: normalizedRole,
+          ...body,
         }),
       })
       const data = (await r.json().catch(() => null)) as (BusinessPayload & { error?: string }) | null
-      if (!r.ok) {
-        if (data?.error) throw new Error(data.error)
-        throw new Error('__BUSINESS_STAFF_LOCAL__')
-      }
-
-      const payload = data
-        ? {
-            ...data,
-            staff: normalizeBusinessStaff(data.staff),
-          }
-        : createLocalBusinessPayload(userId, business)
-      applyBusinessPayload(payload)
-      setPickerForSlot(null)
+      if (!r.ok) throw new Error(data?.error ?? fallbackError)
+      const nextPayload = normalizeBusinessPayload(userId, data, business)
+      applyBusinessPayload(nextPayload)
+      return nextPayload
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message !== '__BUSINESS_STAFF_LOCAL__' &&
-        !/Failed to fetch|NetworkError|fetch|abort/i.test(error.message)
-      ) {
-        setNotice(error.message)
-        setSavingBusiness(false)
-        return
-      }
-
-      const nextStaff = staff.map((slot) => (
-        slot.slotIndex === slotIndex
-          ? {
-              ...slot,
-              roleName: normalizedRole,
-              userId: nextEmployee.userId,
-              username: nextEmployee.username,
-              displayName: nextEmployee.displayName,
-            }
-          : slot
-      ))
-
-      setStaff(nextStaff)
-      saveLocalBusinessStaff(userId, nextStaff)
-      setPickerForSlot(null)
+      setNotice(error instanceof Error ? error.message : fallbackError)
+      return null
     } finally {
       setSavingBusiness(false)
     }
-  }, [applyBusinessPayload, business, isOwner, roleDraft, staff, userId])
+  }, [applyBusinessPayload, business, userId])
 
-  const handleAssign = useCallback((slotIndex: number, friend: UserPreview) => {
-    void syncStaffSlot(slotIndex, {
-      userId: friend.userId,
-      username: friend.username,
-      displayName: friend.displayName,
-    })
-  }, [syncStaffSlot])
+  const openStaffPicker = useCallback((slotIndex: number) => {
+    if (!canManageStaff) return
+    setPickerForSlot(slotIndex)
+    setRoleDraft(staff[slotIndex]?.roleName ?? getDefaultBusinessRole(slotIndex))
+  }, [canManageStaff, staff])
 
-  const handleClear = useCallback((slotIndex: number) => {
-    void syncStaffSlot(slotIndex, {
-      userId: null,
-      username: null,
-      displayName: null,
-    })
-  }, [syncStaffSlot])
+  const handleInvite = useCallback((slotIndex: number, friend: UserPreview) => {
+    const normalizedRole = roleDraft.trim() || getDefaultBusinessRole(slotIndex)
+    void (async () => {
+      const payload = await runBusinessAction({
+        action: 'invite',
+        slotIndex,
+        targetUserId: friend.userId,
+        roleName: normalizedRole,
+      }, 'Не удалось отправить приглашение')
+      if (payload) {
+        setPickerForSlot(null)
+        setNotice(`Письмо с приглашением отправлено ${getUserPrimaryLabel(friend)}`)
+      }
+    })()
+  }, [roleDraft, runBusinessAction])
+
+  const handleRemove = useCallback((slotIndex: number) => {
+    void (async () => {
+      const payload = await runBusinessAction({
+        action: 'remove_staff',
+        slotIndex,
+      }, 'Не удалось убрать сотрудника')
+      if (payload) {
+        setPickerForSlot(null)
+        setNotice('Сотрудник убран из бизнеса')
+      }
+    })()
+  }, [runBusinessAction])
+
+  const handleCancelInvite = useCallback((slotIndex: number) => {
+    void (async () => {
+      const payload = await runBusinessAction({
+        action: 'cancel_invite',
+        slotIndex,
+      }, 'Не удалось отменить приглашение')
+      if (payload) {
+        setPickerForSlot(null)
+        setNotice('Приглашение отменено')
+      }
+    })()
+  }, [runBusinessAction])
 
   const handleSaveRole = useCallback((slotIndex: number) => {
-    const slot = staff[slotIndex]
-    if (!slot) return
-    void syncStaffSlot(slotIndex, {
-      userId: slot.userId,
-      username: slot.username,
-      displayName: slot.displayName,
-    })
-  }, [staff, syncStaffSlot])
+    const normalizedRole = roleDraft.trim() || getDefaultBusinessRole(slotIndex)
+    void (async () => {
+      const payload = await runBusinessAction({
+        action: 'update_role',
+        slotIndex,
+        roleName: normalizedRole,
+      }, 'Не удалось сохранить должность')
+      if (payload) {
+        setPickerForSlot(null)
+        setNotice('Должность обновлена')
+      }
+    })()
+  }, [roleDraft, runBusinessAction])
+
+  const handleLeaveBusiness = useCallback(() => {
+    void (async () => {
+      const payload = await runBusinessAction({ action: 'leave' }, 'Не удалось выйти из бизнеса')
+      if (payload) {
+        setNotice('Вы вышли из бизнеса')
+      }
+    })()
+  }, [runBusinessAction])
 
   const handleOpenBusiness = useCallback(async () => {
     const normalizedName = businessName.trim() || 'Мой бизнес'
@@ -3309,20 +3591,11 @@ function BusinessPanel({
         throw new Error('__BUSINESS_LOCAL_FALLBACK__')
       }
 
-      const payload = data
-        ? {
-            ...data,
-            staff: normalizeBusinessStaff(data.staff),
-          }
-        : {
-            ...createLocalBusinessPayload(userId, {
-              name: normalizedName,
-              description: normalizedDescription,
-              capital: String(BUSINESS_START_CAPITAL),
-            }),
-            stars,
-          }
-      applyBusinessPayload(payload)
+      applyBusinessPayload(normalizeBusinessPayload(userId, data, {
+        name: normalizedName,
+        description: normalizedDescription,
+        capital: String(BUSINESS_START_CAPITAL),
+      }))
       emitClose()
     } catch (error) {
       if (
@@ -3349,16 +3622,16 @@ function BusinessPanel({
         capital: String(BUSINESS_START_CAPITAL),
       }
 
-      setMode('owner')
-      setBusiness(nextBusiness)
-      setOwner({
-        userId,
-        username: null,
-        displayName: null,
-      })
-      setAssignment(null)
-      setStaff(createEmptyBusinessStaff())
+      const localPayload = createLocalBusinessPayload(userId, nextBusiness)
+      setMode(localPayload.mode)
+      setBusiness(localPayload.business)
+      setOwner(localPayload.owner)
+      setAssignment(localPayload.assignment)
+      setPermissions(localPayload.permissions)
+      setPendingInvites(localPayload.pendingInvites)
+      setStaff(localPayload.staff)
       emitBusinessChange(nextBusiness)
+      emitBusinessModeChange('owner')
       setBusinessName(nextBusiness.name)
       setBusinessDescription(nextBusiness.description)
       saveLocalBusiness(userId, nextBusiness)
@@ -3369,10 +3642,10 @@ function BusinessPanel({
     } finally {
       setSavingBusiness(false)
     }
-  }, [applyBusinessPayload, businessDescription, businessName, emitClose, emitBusinessChange, emitStarsChange, stars, userId])
+  }, [applyBusinessPayload, businessDescription, businessName, emitBusinessChange, emitBusinessModeChange, emitClose, emitStarsChange, stars, userId])
 
   const handleSaveBusiness = useCallback(async () => {
-    if (!business || !isOwner) return
+    if (!business || !canEditBusiness) return
     const normalizedName = businessName.trim() || business.name
     const normalizedDescription = businessDescription.trim() || business.description
     setSavingBusiness(true)
@@ -3389,19 +3662,12 @@ function BusinessPanel({
         }),
       })
       const data = await r.json().catch(() => null) as (BusinessPayload & { error?: string }) | null
-      if (!r.ok) throw new Error(data?.error ?? '__BUSINESS_LOCAL_SAVE__')
-
-      const payload = data
-        ? {
-            ...data,
-            staff: normalizeBusinessStaff(data.staff),
-          }
-        : createLocalBusinessPayload(userId, {
-            ...business,
-            name: normalizedName,
-            description: normalizedDescription,
-          })
-      applyBusinessPayload(payload)
+      if (!r.ok) throw new Error(data?.error ?? 'Не удалось сохранить бизнес')
+      applyBusinessPayload(normalizeBusinessPayload(userId, data, {
+        ...business,
+        name: normalizedName,
+        description: normalizedDescription,
+      }))
     } catch {
       const nextBusiness = {
         ...business,
@@ -3414,7 +3680,10 @@ function BusinessPanel({
     } finally {
       setSavingBusiness(false)
     }
-  }, [applyBusinessPayload, business, businessDescription, businessName, emitBusinessChange, isOwner, userId])
+  }, [applyBusinessPayload, business, businessDescription, businessName, canEditBusiness, emitBusinessChange, userId])
+
+  const pickerSlot = pickerForSlot !== null ? staff[pickerForSlot] ?? null : null
+  const pickerPendingInvite = pickerForSlot !== null ? pendingInviteBySlot.get(pickerForSlot) ?? null : null
 
   return (
     <section className={variant === 'page' ? 'businessPanel businessPage' : 'panel businessPanel'}>
@@ -3430,7 +3699,105 @@ function BusinessPanel({
       {loadingBusiness ? (
         <div className="businessNotice">Загружаем бизнес...</div>
       ) : business ? (
-        isEmployee ? (
+        canManageStaff ? (
+          <>
+            <div className="businessInfoCard">
+              {canEditBusiness ? (
+                <>
+                  <label className="businessField">
+                    <span>Название</span>
+                    <input
+                      className="businessInput"
+                      type="text"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      placeholder="Название бизнеса"
+                    />
+                  </label>
+                  <label className="businessField">
+                    <span>Описание</span>
+                    <textarea
+                      className="businessTextarea"
+                      value={businessDescription}
+                      onChange={(e) => setBusinessDescription(e.target.value)}
+                      placeholder="Описание бизнеса"
+                      rows={3}
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <div className="businessGuestEyebrow">Управление бизнесом</div>
+                  <div className="businessGuestTitle">{business.name}</div>
+                  <p className="businessHint">{business.description}</p>
+                  {assignment && <div className="businessRolePill">Ваша роль: {assignment.roleName}</div>}
+                </>
+              )}
+
+              <div className="businessCapitalRow">
+                <span className="businessCapitalLabel">Капитал бизнеса</span>
+                <span className="businessCapitalValue">{formatStars(business.capital)}</span>
+              </div>
+
+              {canEditBusiness && (
+                <button
+                  type="button"
+                  className="businessPrimaryButton"
+                  onClick={() => void handleSaveBusiness()}
+                  disabled={savingBusiness}
+                >
+                  {savingBusiness ? 'Сохраняем...' : 'Сохранить бизнес'}
+                </button>
+              )}
+            </div>
+
+            <p className="businessHint">Приглашайте друзей через почту, меняйте должности сотрудников и убирайте их при необходимости.</p>
+            {notice && <div className="businessNotice">{notice}</div>}
+
+            <div className="businessGrid">
+              {staff.map((slot) => {
+                const pendingInvite = pendingInviteBySlot.get(slot.slotIndex)
+                const pendingInvitePreview = pendingInvite
+                  ? {
+                      userId: pendingInvite.targetUserId,
+                      username: pendingInvite.username,
+                      displayName: pendingInvite.displayName,
+                      relation: 'none' as FriendRelation,
+                    }
+                  : null
+
+                return (
+                  <button
+                    key={slot.slotIndex}
+                    type="button"
+                    className={`businessSlot ${slot.userId ? 'isFilled' : ''} ${pendingInvite ? 'hasPendingInvite' : ''}`}
+                    onClick={() => openStaffPicker(slot.slotIndex)}
+                    aria-label={slot.userId ? `Сотрудник ${getUserPrimaryLabel(slot)}` : `Слот сотрудника ${slot.slotIndex + 1}`}
+                  >
+                    <div className="businessSlotIcon" aria-hidden="true">
+                      {slot.userId ? <FriendsIcon /> : pendingInvite ? <MailIcon /> : <GardenIcon />}
+                    </div>
+                    <div className="businessSlotCaption">Сотрудник {slot.slotIndex + 1}</div>
+                    <div className="businessSlotRole">{slot.roleName}</div>
+                    {slot.userId ? (
+                      <div className="businessSlotMeta">
+                        <div className="businessSlotPrimary">{getUserPrimaryLabel(slot)}</div>
+                        <div className="businessSlotSecondary">{getUserSecondaryLabel(slot)}</div>
+                      </div>
+                    ) : pendingInvite && pendingInvitePreview ? (
+                      <div className="businessSlotPending">
+                        <div className="businessSlotPendingName">{getUserPrimaryLabel(pendingInvitePreview)}</div>
+                        <div className="businessSlotPendingNote">Письмо отправлено, ждём ответ</div>
+                      </div>
+                    ) : (
+                      <div className="businessSlotEmpty">Пригласить через почту</div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        ) : (
           <>
             <div className="businessGuestCard">
               <div className="businessGuestEyebrow">Гостевая страница бизнеса</div>
@@ -3450,8 +3817,19 @@ function BusinessPanel({
                 <span className="businessCapitalLabel">Капитал бизнеса</span>
                 <span className="businessCapitalValue">{formatStars(business.capital)}</span>
               </div>
+              {isEmployee && (
+                <button
+                  type="button"
+                  className="businessLeaveButton"
+                  onClick={() => void handleLeaveBusiness()}
+                  disabled={savingBusiness}
+                >
+                  {savingBusiness ? 'Выходим...' : 'Выйти из бизнеса'}
+                </button>
+              )}
             </div>
 
+            {notice && <div className="businessNotice">{notice}</div>}
             <div className="businessRoster">
               {staff.map((slot) => (
                 <div key={slot.slotIndex} className={`businessRosterItem ${slot.userId ? 'isFilled' : ''}`}>
@@ -3463,71 +3841,6 @@ function BusinessPanel({
                     {slot.userId ? getUserSecondaryLabel(slot) : 'Сотрудник ещё не назначен'}
                   </div>
                 </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="businessInfoCard">
-              <label className="businessField">
-                <span>Название</span>
-                <input
-                  className="businessInput"
-                  type="text"
-                  value={businessName}
-                  onChange={(e) => setBusinessName(e.target.value)}
-                  placeholder="Название бизнеса"
-                />
-              </label>
-              <label className="businessField">
-                <span>Описание</span>
-                <textarea
-                  className="businessTextarea"
-                  value={businessDescription}
-                  onChange={(e) => setBusinessDescription(e.target.value)}
-                  placeholder="Описание бизнеса"
-                  rows={3}
-                />
-              </label>
-              <div className="businessCapitalRow">
-                <span className="businessCapitalLabel">Капитал бизнеса</span>
-                <span className="businessCapitalValue">{formatStars(business.capital)}</span>
-              </div>
-              <button
-                type="button"
-                className="businessPrimaryButton"
-                onClick={() => void handleSaveBusiness()}
-                disabled={savingBusiness}
-              >
-                {savingBusiness ? 'Сохраняем...' : 'Сохранить бизнес'}
-              </button>
-            </div>
-
-            <p className="businessHint">Выбирайте друзей по слотам и задавайте для каждого название должности.</p>
-            {notice && <div className="businessNotice">{notice}</div>}
-            <div className="businessGrid">
-              {staff.map((slot) => (
-                <button
-                  key={slot.slotIndex}
-                  type="button"
-                  className={`businessSlot ${slot.userId ? 'isFilled' : ''}`}
-                  onClick={() => openStaffPicker(slot.slotIndex)}
-                  aria-label={slot.userId ? `Сотрудник ${getUserPrimaryLabel(slot)}` : `Пустой слот сотрудника ${slot.slotIndex + 1}`}
-                >
-                  <div className="businessSlotIcon" aria-hidden="true">
-                    {slot.userId ? <FriendsIcon /> : <GardenIcon />}
-                  </div>
-                  <div className="businessSlotCaption">Сотрудник {slot.slotIndex + 1}</div>
-                  <div className="businessSlotRole">{slot.roleName}</div>
-                  {slot.userId ? (
-                    <div className="businessSlotMeta">
-                      <div className="businessSlotPrimary">{getUserPrimaryLabel(slot)}</div>
-                      <div className="businessSlotSecondary">{getUserSecondaryLabel(slot)}</div>
-                    </div>
-                  ) : (
-                    <div className="businessSlotEmpty">Пригласить друга</div>
-                  )}
-                </button>
               ))}
             </div>
           </>
@@ -3567,20 +3880,28 @@ function BusinessPanel({
         </div>
       )}
 
-      {business && isOwner && pickerForSlot !== null && (
+      {business && canManageStaff && pickerForSlot !== null && pickerSlot && (
         <div className="businessPickerOverlay" onClick={() => setPickerForSlot(null)}>
           <div className="businessPicker" onClick={(e) => e.stopPropagation()}>
             <div className="businessPickerHeader">
               <h3>Сотрудник и должность</h3>
-              {staff[pickerForSlot]?.userId && (
+              {pickerSlot.userId ? (
                 <button
                   type="button"
                   className="businessPickerRemove"
-                  onClick={() => handleClear(pickerForSlot)}
+                  onClick={() => handleRemove(pickerForSlot)}
                 >
-                  Убрать
+                  Удалить сотрудника
                 </button>
-              )}
+              ) : pickerPendingInvite ? (
+                <button
+                  type="button"
+                  className="businessPickerRemove"
+                  onClick={() => handleCancelInvite(pickerForSlot)}
+                >
+                  Отменить письмо
+                </button>
+              ) : null}
             </div>
 
             <label className="businessField">
@@ -3603,10 +3924,28 @@ function BusinessPanel({
               {savingBusiness ? 'Сохраняем...' : 'Сохранить должность'}
             </button>
 
-            {loadingFriends ? (
+            {pickerSlot.userId ? (
+              <div className="businessPickerInviteCard">
+                <div className="businessPickerInviteLabel">Текущий сотрудник</div>
+                <div className="businessPickerItemPrimary">{getUserPrimaryLabel(pickerSlot)}</div>
+                <div className="businessPickerItemSecondary">{getUserSecondaryLabel(pickerSlot)}</div>
+              </div>
+            ) : pickerPendingInvite ? (
+              <div className="businessPickerInviteCard">
+                <div className="businessPickerInviteLabel">Ожидаем ответ на письмо</div>
+                <div className="businessPickerItemPrimary">
+                  {getUserPrimaryLabel({
+                    userId: pickerPendingInvite.targetUserId,
+                    username: pickerPendingInvite.username,
+                    displayName: pickerPendingInvite.displayName,
+                  })}
+                </div>
+                <div className="businessPickerItemSecondary">{pickerPendingInvite.roleName}</div>
+              </div>
+            ) : loadingFriends ? (
               <p className="businessPickerEmpty">Загружаем друзей...</p>
             ) : availableFriends.length === 0 ? (
-              <p className="businessPickerEmpty">Нет доступных друзей для найма.</p>
+              <p className="businessPickerEmpty">Нет доступных друзей для приглашения. Сначала добавьте человека в друзья.</p>
             ) : (
               <div className="businessPickerList">
                 {availableFriends.map((friend) => (
@@ -3614,15 +3953,15 @@ function BusinessPanel({
                     key={friend.userId}
                     type="button"
                     className="businessPickerItem"
-                    onClick={() => handleAssign(pickerForSlot, friend)}
+                    onClick={() => handleInvite(pickerForSlot, friend)}
                     disabled={savingBusiness}
                   >
                     <div className="businessPickerItemIcon" aria-hidden="true">
-                      <FriendsIcon />
+                      <MailIcon />
                     </div>
                     <div className="businessPickerItemMeta">
                       <span className="businessPickerItemPrimary">{getUserPrimaryLabel(friend)}</span>
-                      <span className="businessPickerItemSecondary">{getUserSecondaryLabel(friend)}</span>
+                      <span className="businessPickerItemSecondary">Отправить приглашение в почту</span>
                     </div>
                   </button>
                 ))}
@@ -3634,7 +3973,7 @@ function BusinessPanel({
               className="businessPickerCancel"
               onClick={() => setPickerForSlot(null)}
             >
-              Отмена
+              Закрыть
             </button>
           </div>
         </div>
@@ -3651,6 +3990,8 @@ function App() {
   const [isPackOpen, setIsPackOpen] = useState(false)
   const [isSlotsOpen, setIsSlotsOpen] = useState(false)
   const [isClickerOpen, setIsClickerOpen] = useState(false)
+  const [isMailOpen, setIsMailOpen] = useState(false)
+  const [mailInboxCount, setMailInboxCount] = useState(0)
   const [isApartmentThemeOpen, setIsApartmentThemeOpen] = useState(false)
   const [packClicks, setPackClicks] = useState(0)
   const [isExploding, setIsExploding] = useState(false)
@@ -3862,10 +4203,7 @@ function App() {
       const r = await fetchWithTimeout(`/api/business?userId=${encodeURIComponent(userId)}`)
       if (!r.ok) throw new Error('Не удалось загрузить бизнес')
       const data = (await r.json()) as BusinessPayload
-      let nextPayload: BusinessPayload = {
-        ...data,
-        staff: normalizeBusinessStaff(data.staff),
-      }
+      let nextPayload = normalizeBusinessPayload(userId, data, localBusiness)
 
       if (!nextPayload.business && localBusiness) {
         nextPayload = await restoreBusinessFromLocal(userId, localBusiness)
@@ -3891,6 +4229,32 @@ function App() {
   useEffect(() => {
     void loadBusinessStatus()
   }, [loadBusinessStatus])
+
+  useEffect(() => {
+    if (tab === 'business' && !businessProfile) {
+      setTab('home')
+    }
+  }, [businessProfile, tab])
+
+  const loadMailPreview = useCallback(async () => {
+    try {
+      const r = await fetchWithTimeout(`/api/mail?userId=${encodeURIComponent(userId)}`)
+      if (!r.ok) throw new Error('Не удалось загрузить почту')
+      const data = (await r.json()) as { inbox?: MailInvite[] }
+      setMailInboxCount(Array.isArray(data.inbox) ? data.inbox.length : 0)
+    } catch {
+      setMailInboxCount(0)
+    }
+  }, [userId])
+
+  useEffect(() => {
+    void loadMailPreview()
+    const intervalId = window.setInterval(() => {
+      void loadMailPreview()
+    }, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [loadMailPreview])
 
   useEffect(() => {
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
@@ -4117,6 +4481,17 @@ function App() {
             >
               <FriendsIcon />
             </button>
+            <button
+              type="button"
+              className="edgeMailButton"
+              aria-label="Почта"
+              onClick={() => setIsMailOpen(true)}
+            >
+              <MailIcon />
+              {mailInboxCount > 0 && (
+                <span className="edgeMailBadge">{mailInboxCount > 9 ? '9+' : mailInboxCount}</span>
+              )}
+            </button>
             {businessMode === 'employee' && businessProfile && (
               <button
                 type="button"
@@ -4321,6 +4696,18 @@ function App() {
             saveHomeBackground(userId, backgroundId)
           }}
           onClose={() => setIsApartmentThemeOpen(false)}
+        />
+      )}
+
+      {isMailOpen && (
+        <MailPanel
+          userId={userId}
+          onClose={() => setIsMailOpen(false)}
+          onInboxCountChange={setMailInboxCount}
+          onBusinessAccepted={() => {
+            void loadBusinessStatus()
+            setTab('business')
+          }}
         />
       )}
 
