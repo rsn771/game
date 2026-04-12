@@ -2,7 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type
 
 type TabKey = 'home' | 'inventory' | 'friends' | 'customize' | 'business'
 
-type CardDef = { id: string; name: string; imageSrc: string }
+type CardDef = { id: string; name: string; imageSrc: string; description: string }
 
 type InventoryItem = {
   id: string
@@ -55,7 +55,7 @@ type AvatarFaceDef = {
   description: string
 }
 
-type AvatarItemId = 'rose_bouquet_huge'
+type AvatarItemId = 'rose_bouquet_huge' | 'hermes_bag_black_blood'
 
 type AvatarItemDef = {
   id: AvatarItemId
@@ -271,10 +271,12 @@ const SEEDED_STAR_BALANCES: Record<string, string> = {
 const APARTMENT_CARD_ID = 'asset_apartment'
 const SKYLINE_STUDIO_CARD_ID = 'asset_skyline_studio'
 const HUGE_BOUQUET_CARD_ID: AvatarItemId = 'rose_bouquet_huge'
+const HERMES_BAG_CARD_ID: AvatarItemId = 'hermes_bag_black_blood'
 const ANNOYED_FACE_SHOP_ITEM_ID = 'unlock_face_annoyed_halfmoon'
 const APARTMENT_SHOP_PRICE = 10_000
 const SKYLINE_STUDIO_SHOP_PRICE = 50_000
 const HUGE_BOUQUET_SHOP_PRICE = 10_000
+const HERMES_BAG_SHOP_PRICE = 6_660_001
 const ANNOYED_FACE_SHOP_PRICE = 100
 const HUGE_BOUQUET_DURATION_MS = 48 * 60 * 60 * 1000
 const BUSINESS_OPEN_COST = 100_000
@@ -365,6 +367,12 @@ const AVATAR_ITEMS: AvatarItemDef[] = [
     description: 'Появляется на домашней сцене в левом нижнем углу и доступен 48 часов с момента покупки.',
     imageSrc: '/card-rose-bouquet-huge.png',
   },
+  {
+    id: HERMES_BAG_CARD_ID,
+    name: 'Сумка Hermes',
+    description: 'Люкс сумка из черной кожи с красным золотом из коллекции "Black and Blood".',
+    imageSrc: '/card-hermes-bag-black-blood.png',
+  },
 ]
 
 const HOME_SCENE_SLOTS: HomeSceneSlotDef[] = [
@@ -422,22 +430,51 @@ const SLOT_REWARDS: SlotRewardDef[] = [
 ]
 
 const PACK_CARDS: CardDef[] = [
-  { id: 'rose_red', name: 'Красная Роза', imageSrc: '/card-rose.png' },
-  { id: 'rose_white', name: 'Белая Роза', imageSrc: '/card-rose-white.png' },
-  { id: 'knife_kitchen', name: 'Кухонный нож', imageSrc: '/card-knife-kitchen.png' },
-  { id: 'log', name: 'Бревно', imageSrc: '/card-log.png' },
-  { id: 'axe_noir', name: 'Топор нуар', imageSrc: '/card-axe-noir.png' },
-  { id: 'axe', name: 'Топор', imageSrc: '/card-axe.png' },
+  { id: 'rose_red', name: 'Красная Роза', imageSrc: '/card-rose.png', description: 'Классическая красная роза.' },
+  { id: 'rose_white', name: 'Белая Роза', imageSrc: '/card-rose-white.png', description: 'Редкая белая роза.' },
+  { id: 'knife_kitchen', name: 'Кухонный нож', imageSrc: '/card-knife-kitchen.png', description: 'Острый кухонный нож.' },
+  { id: 'log', name: 'Бревно', imageSrc: '/card-log.png', description: 'Тяжелое бревно из пака.' },
+  { id: 'axe_noir', name: 'Топор нуар', imageSrc: '/card-axe-noir.png', description: 'Темный топор с нуарным стилем.' },
+  { id: 'axe', name: 'Топор', imageSrc: '/card-axe.png', description: 'Классический рабочий топор.' },
 ]
 
 const ALL_CARDS: CardDef[] = [
-  { id: APARTMENT_CARD_ID, name: 'Квартира', imageSrc: '/home-bg-apartment-sunrise.svg' },
-  { id: SKYLINE_STUDIO_CARD_ID, name: 'Ночная skyline-студия', imageSrc: '/home-bg-apartment-skyline.svg' },
-  { id: HUGE_BOUQUET_CARD_ID, name: 'Огромный букет красных роз', imageSrc: '/card-rose-bouquet-huge.png' },
+  {
+    id: APARTMENT_CARD_ID,
+    name: 'Квартира',
+    imageSrc: '/home-bg-apartment-sunrise.svg',
+    description: 'Жильё с выбором темы интерьера: светлая квартира или ночной лофт.',
+  },
+  {
+    id: SKYLINE_STUDIO_CARD_ID,
+    name: 'Ночная skyline-студия',
+    imageSrc: '/home-bg-apartment-skyline.svg',
+    description: 'Отдельная студия с ночным skyline, огнями города и атмосферной сценой.',
+  },
+  {
+    id: HUGE_BOUQUET_CARD_ID,
+    name: 'Огромный букет красных роз',
+    imageSrc: '/card-rose-bouquet-huge.png',
+    description: 'Временный предмет для домашней страницы. После покупки или получения доступен 48 часов.',
+  },
+  {
+    id: HERMES_BAG_CARD_ID,
+    name: 'Сумка Hermes',
+    imageSrc: '/card-hermes-bag-black-blood.png',
+    description: 'Люкс сумка из черной кожи с красным золотом из коллекции "Black and Blood".',
+  },
   ...PACK_CARDS,
-  { id: 'rose_2red', name: '2 красные розы', imageSrc: '/card-rose-2red.png' },
-  { id: 'rose_bouquet', name: 'Букет красных роз', imageSrc: '/card-rose-bouquet.png' },
+  { id: 'rose_2red', name: '2 красные розы', imageSrc: '/card-rose-2red.png', description: 'Две красные розы, полученные слиянием.' },
+  { id: 'rose_bouquet', name: 'Букет красных роз', imageSrc: '/card-rose-bouquet.png', description: 'Собранный букет красных роз.' },
 ]
+
+const PACK_DROP_TABLE = [
+  { label: '+10 звёзд на баланс', chance: '40%' },
+  { label: '+100 звёзд на баланс', chance: '40%' },
+  { label: 'Квартира', chance: '10%' },
+  { label: 'Сумка Hermes', chance: '1%' },
+  { label: 'Пусто', chance: '9%' },
+] as const
 
 const MERGE_RESULTS: Record<string, string> = {
   'rose_red|rose_red': 'rose_2red',
@@ -694,7 +731,16 @@ function pickLocalPackReward(): PackRewardResult {
     }
   }
 
-  // Requested chances add up to 90%, so the remaining 10% stays as an empty pack.
+  if (roll < 91) {
+    return {
+      kind: 'item',
+      title: 'Сумка Hermes',
+      subtitle: 'Люкс предмет',
+      cardId: HERMES_BAG_CARD_ID,
+      imageSrc: '/card-hermes-bag-black-blood.png',
+    }
+  }
+
   return {
     kind: 'empty',
     title: 'Пусто',
@@ -968,6 +1014,14 @@ function getOwnedHomeBackgrounds(inventory: InventoryItem[]): HomeBackgroundDef[
 function getAvailableAvatarItems(inventory: InventoryItem[]): AvatarItemDef[] {
   const ownedCardIds = new Set(inventory.map((item) => item.cardId))
   return AVATAR_ITEMS.filter((item) => ownedCardIds.has(item.id))
+}
+
+function getCardById(cardId: string): CardDef | null {
+  return ALL_CARDS.find((card) => card.id === cardId) ?? null
+}
+
+function getInventoryItemDescription(item: InventoryItem): string {
+  return getCardById(item.cardId)?.description ?? 'Описание появится позже.'
 }
 
 function loadHomeBackground(userId: string): HomeBackgroundId {
@@ -2490,7 +2544,7 @@ function InventoryPanel({
   return (
     <section ref={panelRef} className="panel">
       <h2>Инвентарь</h2>
-      <p className="inventoryHint">Нажмите на предмет, чтобы поставить его на домашнюю сцену, или зажмите и перетащите для слияния</p>
+      <p className="inventoryHint">Нажмите на предмет, чтобы открыть его просмотр, или зажмите и перетащите для слияния</p>
       <div className="inventoryGrid" role="list">
         {inventory.map((item) => (
           <div
@@ -3290,6 +3344,80 @@ function CustomizePanel({
         {selectedAvatarFace.name} сейчас выбрано для персонажа. Предметы для дома теперь ставятся напрямую из инвентаря.
       </p>
     </section>
+  )
+}
+
+function InventoryItemPreviewModal({
+  item,
+  onClose,
+  onOpenHousing,
+  onPlaceOnScene,
+}: {
+  item: InventoryItem
+  onClose: () => void
+  onOpenHousing: () => void
+  onPlaceOnScene: () => void
+}) {
+  const avatarItemId = resolveAvatarItemId(item.cardId)
+  const isHousingItem = item.cardId === APARTMENT_CARD_ID || item.cardId === SKYLINE_STUDIO_CARD_ID
+  const canPlaceOnScene = Boolean(getAvatarItemById(avatarItemId))
+  const expiresInMs = item.expiresAt ? Math.max(0, item.expiresAt - Date.now()) : null
+
+  return (
+    <div className="inventoryPreviewOverlay" onClick={onClose}>
+      <div className="inventoryPreviewModal" onClick={(e) => e.stopPropagation()}>
+        <div className="inventoryPreviewHeader">
+          <div>
+            <h3>{item.name}</h3>
+            <p className="inventoryPreviewHint">
+              Просмотр предмета и быстрые действия для дома.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="friendTransferClose"
+            onClick={onClose}
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="inventoryPreviewArt">
+          <ChromaKeyImage className="inventoryPreviewImg" src={item.imageSrc} alt={item.name} />
+        </div>
+
+        <div className="inventoryPreviewBody">
+          <p className="inventoryPreviewDescription">{getInventoryItemDescription(item)}</p>
+
+          {expiresInMs !== null && (
+            <div className="inventoryPreviewMeta">
+              Доступно ещё: {formatCountdown(expiresInMs)}
+            </div>
+          )}
+
+          {canPlaceOnScene && (
+            <button
+              type="button"
+              className="inventoryPreviewAction"
+              onClick={onPlaceOnScene}
+            >
+              Поставить на домашнюю сцену
+            </button>
+          )}
+
+          {isHousingItem && (
+            <button
+              type="button"
+              className="inventoryPreviewAction"
+              onClick={onOpenHousing}
+            >
+              Выбрать жильё
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -4608,6 +4736,35 @@ function ShopPanel({
               </button>
             </div>
           </article>
+
+          <article className="shopCard">
+            <div className="shopCardArt" aria-hidden="true">
+              <ChromaKeyImage className="shopCardImg shopCardImg--contain" src="/card-hermes-bag-black-blood.png" alt="" />
+            </div>
+            <div className="shopCardBody">
+              <div className="shopCardTitleRow">
+                <div className="shopCardTitle">Сумка Hermes</div>
+                <div className="shopCardPrice">{formatStars(String(HERMES_BAG_SHOP_PRICE))}</div>
+              </div>
+              <p className="shopCardDescription">
+                Люкс сумка из черной кожи с красным золотом из коллекции "Black and Blood". Можно поставить на домашнюю сцену и также выбить из стикерпака с шансом 1%.
+              </p>
+              <button
+                type="button"
+                className="shopBuyButton"
+                onClick={() => void handleBuyShopItem(
+                  HERMES_BAG_CARD_ID,
+                  HERMES_BAG_SHOP_PRICE,
+                  'Сумка Hermes',
+                  false,
+                  { allowDuplicates: true },
+                )}
+                disabled={buyingItemId !== null}
+              >
+                {buyingItemId === HERMES_BAG_CARD_ID ? 'Покупаем...' : 'Купить'}
+              </button>
+            </div>
+          </article>
         </div>
       </div>
     </div>
@@ -5298,6 +5455,7 @@ function App() {
   const [selectedAvatarItemId, setSelectedAvatarItemId] = useState<AvatarItemId | null>(() => loadAvatarItem(userId))
   const [homeSceneItems, setHomeSceneItems] = useState<HomeSceneItems>(() => loadHomeSceneItems(userId))
   const [sceneItemPickerItem, setSceneItemPickerItem] = useState<InventoryItem | null>(null)
+  const [selectedInventoryPreviewItem, setSelectedInventoryPreviewItem] = useState<InventoryItem | null>(null)
   const [ownedAvatarFaceIds, setOwnedAvatarFaceIds] = useState<AvatarFaceId[]>(() => loadUnlockedAvatarFaces(userId))
   const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
   const hasApartment = useMemo(
@@ -5861,6 +6019,13 @@ function App() {
     setSceneItemPickerItem(null)
   }, [inventory, sceneItemPickerItem])
 
+  useEffect(() => {
+    if (!selectedInventoryPreviewItem) return
+    const stillOwned = inventory.some((item) => item.id === selectedInventoryPreviewItem.id)
+    if (stillOwned) return
+    setSelectedInventoryPreviewItem(null)
+  }, [inventory, selectedInventoryPreviewItem])
+
   const packRemainingMs = packNextOpenAt ? Math.max(0, packNextOpenAt - packNow) : 0
   const isPackReady = packRemainingMs === 0
 
@@ -6167,14 +6332,7 @@ function App() {
             userId={userId}
             onReload={loadInventory}
             onItemTap={(item) => {
-              if (item.cardId === APARTMENT_CARD_ID || item.cardId === SKYLINE_STUDIO_CARD_ID) {
-                setIsApartmentThemeOpen(true)
-                return
-              }
-
-              if (getAvatarItemById(resolveAvatarItemId(item.cardId))) {
-                setSceneItemPickerItem(item)
-              }
+              setSelectedInventoryPreviewItem(item)
             }}
           />
         )}
@@ -6234,7 +6392,14 @@ function App() {
                     ? 'Можно вскрыть сейчас. Новый пак открывается раз в 12 часов.'
                     : `Следующее вскрытие через ${formatCountdown(packRemainingMs)}.`}
               </p>
-              <p className="packHint isMuted">Награды: +10 звёзд, +100 звёзд или квартира.</p>
+              <div className="packDropTable" aria-label="Награды стикерпака и шансы">
+                {PACK_DROP_TABLE.map((entry) => (
+                  <div key={entry.label} className="packDropRow">
+                    <span>{entry.label}</span>
+                    <strong>{entry.chance}</strong>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {packClicks < 2 || isExploding ? (
@@ -6356,6 +6521,21 @@ function App() {
             const nextFaces = normalizeUnlockedAvatarFaces([...ownedAvatarFaceIds, faceId])
             setOwnedAvatarFaceIds(nextFaces)
             saveUnlockedAvatarFaces(userId, nextFaces)
+          }}
+        />
+      )}
+
+      {selectedInventoryPreviewItem && (
+        <InventoryItemPreviewModal
+          item={selectedInventoryPreviewItem}
+          onClose={() => setSelectedInventoryPreviewItem(null)}
+          onOpenHousing={() => {
+            setSelectedInventoryPreviewItem(null)
+            setIsApartmentThemeOpen(true)
+          }}
+          onPlaceOnScene={() => {
+            setSceneItemPickerItem(selectedInventoryPreviewItem)
+            setSelectedInventoryPreviewItem(null)
           }}
         />
       )}

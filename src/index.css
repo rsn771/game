@@ -249,6 +249,7 @@
   }
 
   .friendProfilePlacedItem.homePlacedItem--center {
+    width: min(28vw, 124px);
     bottom: -2px;
   }
 
@@ -340,6 +341,7 @@
   }
 
   .friendProfilePlacedItem.homePlacedItem--center {
+    width: min(30vw, 114px);
     bottom: -4px;
   }
 
@@ -559,26 +561,37 @@ body {
 
 .homePlacedItem {
   pointer-events: none;
-  animation: home-item-sway 4.8s ease-in-out infinite;
+  --home-item-origin: 50% 84%;
 }
 
 .homePlacedItem--left {
   left: 16px;
   bottom: 12px;
-  transform-origin: 34% 84%;
+  --home-item-origin: 34% 84%;
 }
 
 .homePlacedItem--center {
-  left: 50%;
+  left: calc(50% - 12px);
   bottom: -2px;
   transform: translateX(-50%);
-  transform-origin: 50% 84%;
 }
 
 .homePlacedItem--right {
   right: 16px;
   bottom: 12px;
-  transform-origin: 66% 84%;
+  --home-item-origin: 66% 84%;
+}
+
+.homePlacedItem.homePlacedItem--center,
+.friendProfilePlacedItem.homePlacedItem--center {
+  width: min(28vw, 136px);
+  --home-item-origin: 50% 84%;
+}
+
+.homeScenePlus.homePlacedItem--center {
+  left: calc(50% - 12px);
+  bottom: -2px;
+  transform: translateX(-50%);
 }
 
 .homeScenePlus {
@@ -607,22 +620,26 @@ body {
 .friendProfilePlacedItem.homePlacedItem--left {
   left: 16px;
   bottom: 12px;
+  --home-item-origin: 34% 84%;
 }
 
 .friendProfilePlacedItem.homePlacedItem--center {
-  left: 50%;
+  left: calc(50% - 12px);
   bottom: -2px;
 }
 
 .friendProfilePlacedItem.homePlacedItem--right {
   right: 16px;
   bottom: 12px;
+  --home-item-origin: 66% 84%;
 }
 
 .sceneAvatarItemImg {
   display: block;
   width: 100%;
   height: auto;
+  transform-origin: var(--home-item-origin, 50% 84%);
+  animation: home-item-sway 4.8s ease-in-out infinite;
 }
 
 @keyframes home-item-sway {
@@ -883,6 +900,96 @@ body {
   text-align: center;
   letter-spacing: 0.2px;
   font-weight: 600;
+}
+
+.inventoryPreviewOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.74);
+  backdrop-filter: blur(12px);
+}
+
+.inventoryPreviewModal {
+  width: min(92vw, 440px);
+  display: grid;
+  gap: 16px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 8, 8, 0.96);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.48);
+  padding: 18px;
+}
+
+.inventoryPreviewHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.inventoryPreviewHeader h3 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.02;
+}
+
+.inventoryPreviewHint {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.inventoryPreviewArt {
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  padding: 16px;
+}
+
+.inventoryPreviewImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.inventoryPreviewBody {
+  display: grid;
+  gap: 12px;
+}
+
+.inventoryPreviewDescription {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.inventoryPreviewMeta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.inventoryPreviewAction {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 13px 16px;
+  cursor: pointer;
+}
+
+.inventoryPreviewAction:active {
+  transform: scale(0.99);
 }
 
 /* Garden */
@@ -2963,6 +3070,32 @@ body {
   color: var(--muted);
 }
 
+.packDropTable {
+  width: min(100%, 360px);
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.packDropRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.packDropRow strong {
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
 .packInteractive {
   appearance: none;
   border: none;
@@ -3957,6 +4090,11 @@ body.inventoryDragActive {
     width: min(34vw, 148px);
   }
 
+  .homePlacedItem.homePlacedItem--center,
+  .friendProfilePlacedItem.homePlacedItem--center {
+    width: min(27vw, 112px);
+  }
+
   .homePlacedItem--left,
   .friendProfilePlacedItem.homePlacedItem--left {
     left: 10px;
@@ -3964,7 +4102,8 @@ body.inventoryDragActive {
   }
 
   .homePlacedItem--center,
-  .friendProfilePlacedItem.homePlacedItem--center {
+  .friendProfilePlacedItem.homePlacedItem--center,
+  .homeScenePlus.homePlacedItem--center {
     bottom: -4px;
   }
 
@@ -4070,6 +4209,27 @@ body.inventoryDragActive {
 
   .friendsHint {
     font-size: 12px;
+  }
+
+  .inventoryPreviewOverlay {
+    padding: 10px;
+  }
+
+  .inventoryPreviewModal {
+    width: 100%;
+    max-width: none;
+    border-radius: 24px;
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .inventoryPreviewHeader h3 {
+    font-size: 22px;
+  }
+
+  .inventoryPreviewArt {
+    border-radius: 20px;
+    padding: 12px;
   }
 
   .friendRow {

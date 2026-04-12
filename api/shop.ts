@@ -15,9 +15,11 @@ export const config = {
 const APARTMENT_CARD_ID = 'asset_apartment'
 const SKYLINE_STUDIO_CARD_ID = 'asset_skyline_studio'
 const HUGE_BOUQUET_CARD_ID = 'rose_bouquet_huge'
+const HERMES_BAG_CARD_ID = 'hermes_bag_black_blood'
 const ANNOYED_FACE_SHOP_ITEM_ID = 'unlock_face_annoyed_halfmoon'
 const APARTMENT_SHOP_PRICE = 10_000
 const HUGE_BOUQUET_SHOP_PRICE = 10_000
+const HERMES_BAG_SHOP_PRICE = 6_660_001
 const ANNOYED_FACE_SHOP_PRICE = 100
 const HUGE_BOUQUET_DURATION_MS = 48 * 60 * 60 * 1000
 
@@ -37,6 +39,11 @@ const SHOP_ITEMS = {
     allowDuplicates: true,
     mode: 'timed_inventory',
     durationMs: HUGE_BOUQUET_DURATION_MS,
+  },
+  [HERMES_BAG_CARD_ID]: {
+    price: HERMES_BAG_SHOP_PRICE,
+    allowDuplicates: true,
+    mode: 'inventory',
   },
   [ANNOYED_FACE_SHOP_ITEM_ID]: {
     price: ANNOYED_FACE_SHOP_PRICE,

@@ -15,6 +15,7 @@ export const config = {
 
 const PACK_COOLDOWN_MS = 12 * 60 * 60 * 1000
 const APARTMENT_CARD_ID = 'asset_apartment'
+const HERMES_BAG_CARD_ID = 'hermes_bag_black_blood'
 
 type PackRewardPayload =
   | {
@@ -67,7 +68,16 @@ function pickPackReward(): PackRewardPayload {
     }
   }
 
-  // Requested chances add up to 90%, so the remaining 10% stays as an empty pack.
+  if (roll < 91) {
+    return {
+      kind: 'item',
+      title: 'Сумка Hermes',
+      subtitle: 'Люкс предмет',
+      cardId: HERMES_BAG_CARD_ID,
+      imageSrc: '/card-hermes-bag-black-blood.png',
+    }
+  }
+
   return {
     kind: 'empty',
     title: 'Пусто',

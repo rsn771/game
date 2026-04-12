@@ -7,6 +7,7 @@ const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
 const INVENTORY_RESET_VERSION = 2
 const BUSINESS_SLOT_COUNT = 6
 const HUGE_BOUQUET_CARD_ID = 'rose_bouquet_huge'
+const HERMES_BAG_CARD_ID = 'hermes_bag_black_blood'
 const HOME_SCENE_SLOT_IDS = ['left', 'center', 'right'] as const
 const LEGACY_PACK_CARD_IDS = [
   'rose_red',
@@ -48,7 +49,7 @@ function isTimedInventoryCard(cardId: string): boolean {
 }
 
 function isAvatarSceneItem(cardId: string): boolean {
-  return cardId === HUGE_BOUQUET_CARD_ID
+  return cardId === HUGE_BOUQUET_CARD_ID || cardId === HERMES_BAG_CARD_ID
 }
 
 function normalizeAvatarFace(value?: string | null): string | null {
@@ -214,6 +215,14 @@ async function seedCards(query: SqlRunner) {
   await query`
     insert into cards (id, name, image_src)
     values (${HUGE_BOUQUET_CARD_ID}, 'Огромный букет красных роз', '/card-rose-bouquet-huge.png')
+    on conflict (id) do update
+    set name = excluded.name,
+        image_src = excluded.image_src;
+  `
+
+  await query`
+    insert into cards (id, name, image_src)
+    values (${HERMES_BAG_CARD_ID}, 'Сумка Hermes', '/card-hermes-bag-black-blood.png')
     on conflict (id) do update
     set name = excluded.name,
         image_src = excluded.image_src;
@@ -789,14 +798,14 @@ export async function getUserById(userId: string) {
       select card_id, qty::integer as total_count
       from inventory
       where user_id = ${userId}
-        and card_id = ${HUGE_BOUQUET_CARD_ID}
+        and card_id in (${HUGE_BOUQUET_CARD_ID}, ${HERMES_BAG_CARD_ID})
     ),
     timed_items as (
       select card_id, count(*)::integer as total_count
       from inventory_timed
       where user_id = ${userId}
         and expires_at > now()
-        and card_id = ${HUGE_BOUQUET_CARD_ID}
+        and card_id in (${HUGE_BOUQUET_CARD_ID}, ${HERMES_BAG_CARD_ID})
       group by card_id
     )
     select card_id, sum(total_count)::integer as total_count
