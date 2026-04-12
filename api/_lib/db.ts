@@ -7,6 +7,7 @@ const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
 const INVENTORY_RESET_VERSION = 2
 const BUSINESS_SLOT_COUNT = 6
 const HUGE_BOUQUET_CARD_ID = 'rose_bouquet_huge'
+const HOME_SCENE_SLOT_IDS = ['left', 'center', 'right'] as const
 const LEGACY_PACK_CARD_IDS = [
   'rose_red',
   'rose_white',
@@ -26,7 +27,9 @@ export type UserProfileInput = {
   username?: string | null
   displayName?: string | null
   avatarModel?: string | null
+  avatarFace?: string | null
   avatarItem?: string | null
+  sceneItems?: Record<string, string | null> | null
   homeBackground?: string | null
 }
 
@@ -42,6 +45,58 @@ function normalizeOptionalText(value?: string | null): string | null {
 
 function isTimedInventoryCard(cardId: string): boolean {
   return cardId === HUGE_BOUQUET_CARD_ID
+}
+
+function isAvatarSceneItem(cardId: string): boolean {
+  return cardId === HUGE_BOUQUET_CARD_ID
+}
+
+function normalizeAvatarFace(value?: string | null): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return ['default', 'annoyed_halfmoon'].includes(trimmed) ? trimmed : null
+}
+
+function createEmptySceneItems() {
+  return {
+    left: null,
+    center: null,
+    right: null,
+  } as Record<(typeof HOME_SCENE_SLOT_IDS)[number], string | null>
+}
+
+function normalizeSceneItems(
+  value?: Record<string, string | null> | string | null,
+  fallbackItemId?: string | null,
+) {
+  const base = createEmptySceneItems()
+  const applyValue = (input: unknown) => {
+    if (!input || typeof input !== 'object') return
+    for (const slotId of HOME_SCENE_SLOT_IDS) {
+      const raw = (input as Record<string, unknown>)[slotId]
+      if (typeof raw === 'string' && isAvatarSceneItem(raw.trim())) {
+        base[slotId] = raw.trim()
+      } else {
+        base[slotId] = null
+      }
+    }
+  }
+
+  if (typeof value === 'string') {
+    try {
+      applyValue(JSON.parse(value) as unknown)
+    } catch {
+      // ignore malformed legacy payload
+    }
+  } else {
+    applyValue(value)
+  }
+
+  if (!base.left && !base.center && !base.right && fallbackItemId && isAvatarSceneItem(fallbackItemId)) {
+    base.left = fallbackItemId
+  }
+
+  return base
 }
 
 function normalizeHomeBackground(value?: string | null): string | null {
@@ -241,10 +296,15 @@ async function ensureSchemaOnce() {
   await query`alter table users add column if not exists display_name text;`
   await query`alter table users add column if not exists last_pack_opened_at timestamptz;`
   await query`alter table users add column if not exists avatar_model text;`
+  await query`alter table users add column if not exists avatar_face text;`
+  await query`alter table users add column if not exists face_annoyed_unlocked boolean not null default false;`
   await query`alter table users add column if not exists avatar_item text;`
+  await query`alter table users add column if not exists scene_items text;`
   await query`alter table users add column if not exists home_background text;`
   await query`update users set avatar_model = 'classic' where avatar_model is null;`
   await query`alter table users alter column avatar_model set default 'classic';`
+  await query`update users set avatar_face = 'default' where avatar_face is null;`
+  await query`alter table users alter column avatar_face set default 'default';`
 
   await query`
     create table if not exists cards (
@@ -461,21 +521,38 @@ export async function upsertUserProfile(input: UserProfileInput) {
   const username = normalizeOptionalText(input.username)
   const displayName = normalizeOptionalText(input.displayName)
   const avatarModel = normalizeOptionalText(input.avatarModel)
+  const avatarFaceProvided = Object.prototype.hasOwnProperty.call(input, 'avatarFace')
+  const avatarFace = avatarFaceProvided ? normalizeAvatarFace(input.avatarFace) : null
   const avatarItemProvided = Object.prototype.hasOwnProperty.call(input, 'avatarItem')
   const avatarItem = avatarItemProvided ? normalizeOptionalText(input.avatarItem) : null
+  const sceneItemsProvided = Object.prototype.hasOwnProperty.call(input, 'sceneItems')
+  const sceneItems = sceneItemsProvided
+    ? JSON.stringify(normalizeSceneItems(input.sceneItems ?? null))
+    : null
   const homeBackgroundProvided = Object.prototype.hasOwnProperty.call(input, 'homeBackground')
   const homeBackground = homeBackgroundProvided ? normalizeHomeBackground(input.homeBackground) : null
 
   await sql`
-    insert into users (tg_user_id, username, display_name, avatar_model, avatar_item, home_background)
-    values (${input.userId}, ${username}, ${displayName}, coalesce(${avatarModel}, 'classic'), ${avatarItem}, ${homeBackground})
+    insert into users (tg_user_id, username, display_name, avatar_model, avatar_face, avatar_item, scene_items, home_background)
+    values (${input.userId}, ${username}, ${displayName}, coalesce(${avatarModel}, 'classic'), 'default', ${avatarItem}, ${sceneItems}, ${homeBackground})
     on conflict (tg_user_id) do update
     set username = coalesce(excluded.username, users.username),
         display_name = coalesce(excluded.display_name, users.display_name),
         avatar_model = coalesce(${avatarModel}, users.avatar_model),
+        avatar_face = case
+          when ${avatarFaceProvided} then case
+            when coalesce(${avatarFace}, 'default') = 'annoyed_halfmoon' and users.face_annoyed_unlocked then 'annoyed_halfmoon'
+            else 'default'
+          end
+          else users.avatar_face
+        end,
         avatar_item = case
           when ${avatarItemProvided} then ${avatarItem}
           else users.avatar_item
+        end,
+        scene_items = case
+          when ${sceneItemsProvided} then ${sceneItems}
+          else users.scene_items
         end,
         home_background = case
           when ${homeBackgroundProvided} then ${homeBackground}
@@ -537,6 +614,18 @@ export async function migrateAnonymousUserData(previousUserId: string, nextUserI
           when target.avatar_item is null and source.avatar_item is not null then source.avatar_item
           else target.avatar_item
         end,
+        avatar_face = case
+          when target.avatar_face = 'default'
+            and source.face_annoyed_unlocked
+            and source.avatar_face = 'annoyed_halfmoon'
+            then 'annoyed_halfmoon'
+          else target.avatar_face
+        end,
+        face_annoyed_unlocked = target.face_annoyed_unlocked or coalesce(source.face_annoyed_unlocked, false),
+        scene_items = case
+          when target.scene_items is null and source.scene_items is not null then source.scene_items
+          else target.scene_items
+        end,
         home_background = case
           when target.home_background is null and source.home_background is not null then source.home_background
           else target.home_background
@@ -545,6 +634,28 @@ export async function migrateAnonymousUserData(previousUserId: string, nextUserI
     from users as source
     where target.tg_user_id = ${nextUserId}
       and source.tg_user_id = ${previousUserId};
+  `
+
+  const sourceProfile = await sql<{ avatar_item: string | null; scene_items: string | null }>`
+    select avatar_item, scene_items
+    from users
+    where tg_user_id = ${previousUserId}
+    limit 1;
+  `
+
+  const migratedSceneItems = normalizeSceneItems(
+    sourceProfile.rows[0]?.scene_items ?? null,
+    sourceProfile.rows[0]?.avatar_item ?? null,
+  )
+
+  await sql`
+    update users
+    set scene_items = case
+          when scene_items is null then ${JSON.stringify(migratedSceneItems)}
+          else scene_items
+        end,
+        updated_at = now()
+    where tg_user_id = ${nextUserId};
   `
 
   await sql`
@@ -632,14 +743,16 @@ export async function getUserById(userId: string) {
       and expires_at <= now();
   `
 
-  const { rows: avatarRows } = await sql<{ avatar_item: string | null }>`
-    select avatar_item
+  const { rows: avatarRows } = await sql<{ avatar_item: string | null; scene_items: string | null }>`
+    select avatar_item,
+           scene_items
     from users
     where tg_user_id = ${userId}
     limit 1;
   `
 
   const currentAvatarItem = avatarRows[0]?.avatar_item ?? null
+  const sceneItems = normalizeSceneItems(avatarRows[0]?.scene_items ?? null, currentAvatarItem)
   if (currentAvatarItem) {
     const { rows: availabilityRows } = isTimedInventoryCard(currentAvatarItem)
       ? await sql<{ available: boolean }>`
@@ -669,6 +782,67 @@ export async function getUserById(userId: string) {
         where tg_user_id = ${userId};
       `
     }
+  }
+
+  const { rows: availableSceneRows } = await sql<{ card_id: string; total_count: number }>`
+    with permanent_items as (
+      select card_id, qty::integer as total_count
+      from inventory
+      where user_id = ${userId}
+        and card_id = ${HUGE_BOUQUET_CARD_ID}
+    ),
+    timed_items as (
+      select card_id, count(*)::integer as total_count
+      from inventory_timed
+      where user_id = ${userId}
+        and expires_at > now()
+        and card_id = ${HUGE_BOUQUET_CARD_ID}
+      group by card_id
+    )
+    select card_id, sum(total_count)::integer as total_count
+    from (
+      select * from permanent_items
+      union all
+      select * from timed_items
+    ) all_items
+    group by card_id;
+  `
+
+  const availableSceneCount = new Map<string, number>()
+  for (const row of availableSceneRows) {
+    availableSceneCount.set(row.card_id, row.total_count)
+  }
+
+  const sanitizedSceneItems = createEmptySceneItems()
+  const usedSceneCount = new Map<string, number>()
+  for (const slotId of HOME_SCENE_SLOT_IDS) {
+    const cardId = sceneItems[slotId]
+    if (!cardId) continue
+    const nextUsedCount = (usedSceneCount.get(cardId) ?? 0) + 1
+    const availableCount = availableSceneCount.get(cardId) ?? 0
+    if (nextUsedCount > availableCount) continue
+    usedSceneCount.set(cardId, nextUsedCount)
+    sanitizedSceneItems[slotId] = cardId
+  }
+
+  const normalizedStoredSceneItems = normalizeSceneItems(avatarRows[0]?.scene_items ?? null, currentAvatarItem)
+  const sceneItemsChanged = HOME_SCENE_SLOT_IDS.some((slotId) => normalizedStoredSceneItems[slotId] !== sanitizedSceneItems[slotId])
+  if (sceneItemsChanged) {
+    await sql`
+      update users
+      set scene_items = ${JSON.stringify(sanitizedSceneItems)},
+          avatar_item = null,
+          updated_at = now()
+      where tg_user_id = ${userId};
+    `
+  } else if (currentAvatarItem && !avatarRows[0]?.scene_items) {
+    await sql`
+      update users
+      set scene_items = ${JSON.stringify(sanitizedSceneItems)},
+          avatar_item = null,
+          updated_at = now()
+      where tg_user_id = ${userId};
+    `
   }
 
   const { rows: backgroundRows } = await sql<{ home_background: string | null }>`
@@ -703,13 +877,36 @@ export async function getUserById(userId: string) {
     }
   }
 
+  const { rows: faceRows } = await sql<{ avatar_face: string | null; face_annoyed_unlocked: boolean }>`
+    select avatar_face,
+           face_annoyed_unlocked
+    from users
+    where tg_user_id = ${userId}
+    limit 1;
+  `
+
+  if (
+    faceRows[0]?.avatar_face === 'annoyed_halfmoon'
+    && !faceRows[0]?.face_annoyed_unlocked
+  ) {
+    await sql`
+      update users
+      set avatar_face = 'default',
+          updated_at = now()
+      where tg_user_id = ${userId};
+    `
+  }
+
   const { rows } = await sql<{
     tg_user_id: string
     username: string | null
     display_name: string | null
     stars: string
     avatar_model: string | null
+    avatar_face: string | null
+    face_annoyed_unlocked: boolean
     avatar_item: string | null
+    scene_items: string | null
     home_background: string | null
   }>`
     select tg_user_id,
@@ -717,7 +914,10 @@ export async function getUserById(userId: string) {
            display_name,
            stars::text as stars,
            coalesce(avatar_model, 'classic') as avatar_model,
+           coalesce(avatar_face, 'default') as avatar_face,
+           coalesce(face_annoyed_unlocked, false) as face_annoyed_unlocked,
            avatar_item,
+           scene_items,
            home_background
     from users
     where tg_user_id = ${userId}

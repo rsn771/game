@@ -15,8 +15,10 @@ export const config = {
 const APARTMENT_CARD_ID = 'asset_apartment'
 const SKYLINE_STUDIO_CARD_ID = 'asset_skyline_studio'
 const HUGE_BOUQUET_CARD_ID = 'rose_bouquet_huge'
+const ANNOYED_FACE_SHOP_ITEM_ID = 'unlock_face_annoyed_halfmoon'
 const APARTMENT_SHOP_PRICE = 10_000
 const HUGE_BOUQUET_SHOP_PRICE = 10_000
+const ANNOYED_FACE_SHOP_PRICE = 100
 const HUGE_BOUQUET_DURATION_MS = 48 * 60 * 60 * 1000
 
 const SHOP_ITEMS = {
@@ -35,6 +37,12 @@ const SHOP_ITEMS = {
     allowDuplicates: true,
     mode: 'timed_inventory',
     durationMs: HUGE_BOUQUET_DURATION_MS,
+  },
+  [ANNOYED_FACE_SHOP_ITEM_ID]: {
+    price: ANNOYED_FACE_SHOP_PRICE,
+    allowDuplicates: false,
+    mode: 'face_unlock',
+    faceId: 'annoyed_halfmoon',
   },
 } as const
 
@@ -60,7 +68,21 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
   try {
     await client.query('begin')
 
-    if (!itemConfig.allowDuplicates) {
+    if (itemConfig.mode === 'face_unlock') {
+      const { rows: faceRows } = await client.sql<{ face_annoyed_unlocked: boolean }>`
+        select coalesce(face_annoyed_unlocked, false) as face_annoyed_unlocked
+        from users
+        where tg_user_id = ${userId}
+        limit 1
+        for update;
+      `
+
+      if (faceRows[0]?.face_annoyed_unlocked) {
+        await client.query('rollback')
+        sendJson(res, { error: 'Это лицо уже куплено' }, 409)
+        return
+      }
+    } else if (!itemConfig.allowDuplicates) {
       const { rows: ownedRows } = await client.sql<{ qty: number }>`
         select qty
         from inventory
@@ -93,12 +115,21 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
     }
 
     let expiresAt: string | null = null
+    let unlockedFace: string | null = null
     if (itemConfig.mode === 'timed_inventory') {
       const nextExpiresAt = new Date(Date.now() + itemConfig.durationMs)
       expiresAt = nextExpiresAt.toISOString()
       await client.sql`
         insert into inventory_timed (user_id, card_id, expires_at)
         values (${userId}, ${itemId}, ${nextExpiresAt.toISOString()});
+      `
+    } else if (itemConfig.mode === 'face_unlock') {
+      unlockedFace = itemConfig.faceId
+      await client.sql`
+        update users
+        set face_annoyed_unlocked = true,
+            updated_at = now()
+        where tg_user_id = ${userId};
       `
     } else {
       await client.sql`
@@ -110,7 +141,7 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
     }
 
     await client.query('commit')
-    sendJson(res, { ok: true, stars: userRows[0].stars, expiresAt })
+    sendJson(res, { ok: true, stars: userRows[0].stars, expiresAt, unlockedFace })
   } catch (error) {
     await client.query('rollback').catch(() => {})
     throw error

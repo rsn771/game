@@ -41,9 +41,16 @@ type TelegramIdentity = {
 }
 
 type AvatarModelId = 'classic' | 'minimal_long_hair'
+type AvatarFaceId = 'default' | 'annoyed_halfmoon'
 
 type AvatarModelDef = {
   id: AvatarModelId
+  name: string
+  description: string
+}
+
+type AvatarFaceDef = {
+  id: AvatarFaceId
   name: string
   description: string
 }
@@ -55,6 +62,16 @@ type AvatarItemDef = {
   name: string
   description: string
   imageSrc: string
+}
+
+type HomeSceneSlotId = 'left' | 'center' | 'right'
+
+type HomeSceneItems = Record<HomeSceneSlotId, AvatarItemId | null>
+
+type HomeSceneSlotDef = {
+  id: HomeSceneSlotId
+  label: string
+  placementClass: string
 }
 
 type HomeBackgroundId = 'none' | 'apartment_sunrise' | 'apartment_midnight' | 'skyline_studio'
@@ -197,8 +214,11 @@ type PublicUserProfile = {
   displayName: string | null
   stars: string
   avatarModel: AvatarModelId
+  avatarFace: AvatarFaceId
   avatarItem: AvatarItemId | null
   homeBackground: HomeBackgroundId | null
+  unlockedFaces: AvatarFaceId[]
+  sceneItems: HomeSceneItems
 }
 
 type FriendProfileState = {
@@ -228,7 +248,7 @@ type PackRewardResult =
       subtitle: string
     }
 
-type CustomizeCategoryId = 'pose' | 'headwear' | 'build' | 'hair' | 'face' | 'item'
+type CustomizeCategoryId = 'pose' | 'headwear' | 'build' | 'hair' | 'face'
 
 type CustomizeCategoryDef = {
   id: CustomizeCategoryId
@@ -251,9 +271,11 @@ const SEEDED_STAR_BALANCES: Record<string, string> = {
 const APARTMENT_CARD_ID = 'asset_apartment'
 const SKYLINE_STUDIO_CARD_ID = 'asset_skyline_studio'
 const HUGE_BOUQUET_CARD_ID: AvatarItemId = 'rose_bouquet_huge'
+const ANNOYED_FACE_SHOP_ITEM_ID = 'unlock_face_annoyed_halfmoon'
 const APARTMENT_SHOP_PRICE = 10_000
 const SKYLINE_STUDIO_SHOP_PRICE = 50_000
 const HUGE_BOUQUET_SHOP_PRICE = 10_000
+const ANNOYED_FACE_SHOP_PRICE = 100
 const HUGE_BOUQUET_DURATION_MS = 48 * 60 * 60 * 1000
 const BUSINESS_OPEN_COST = 100_000
 const BUSINESS_START_CAPITAL = 80_000
@@ -323,6 +345,19 @@ const AVATAR_MODELS: AvatarModelDef[] = [
   },
 ]
 
+const AVATAR_FACES: AvatarFaceDef[] = [
+  {
+    id: 'default',
+    name: 'Стандартное лицо',
+    description: 'Классическое лицо персонажа из игры.',
+  },
+  {
+    id: 'annoyed_halfmoon',
+    name: 'Недовольное лицо',
+    description: 'Глаза-полукруги без рта. Открывается покупкой в магазине.',
+  },
+]
+
 const AVATAR_ITEMS: AvatarItemDef[] = [
   {
     id: HUGE_BOUQUET_CARD_ID,
@@ -330,6 +365,12 @@ const AVATAR_ITEMS: AvatarItemDef[] = [
     description: 'Появляется на домашней сцене в левом нижнем углу и доступен 48 часов с момента покупки.',
     imageSrc: '/card-rose-bouquet-huge.png',
   },
+]
+
+const HOME_SCENE_SLOTS: HomeSceneSlotDef[] = [
+  { id: 'left', label: 'Левый слот', placementClass: 'homePlacedItem--left' },
+  { id: 'center', label: 'Центральный слот', placementClass: 'homePlacedItem--center' },
+  { id: 'right', label: 'Правый слот', placementClass: 'homePlacedItem--right' },
 ]
 
 const NIGHT_LOFT_STARS: NightStarDef[] = [
@@ -667,14 +708,98 @@ function resolveAvatarModelId(value: string | null | undefined): AvatarModelId {
     : 'classic'
 }
 
+function resolveAvatarFaceId(value: string | null | undefined): AvatarFaceId {
+  return AVATAR_FACES.some((face) => face.id === value)
+    ? (value as AvatarFaceId)
+    : 'default'
+}
+
 function resolveAvatarItemId(value: string | null | undefined): AvatarItemId | null {
   return AVATAR_ITEMS.some((item) => item.id === value)
     ? (value as AvatarItemId)
     : null
 }
 
+function createEmptyHomeSceneItems(): HomeSceneItems {
+  return {
+    left: null,
+    center: null,
+    right: null,
+  }
+}
+
+function normalizeHomeSceneItems(value: unknown, fallbackItemId?: AvatarItemId | null): HomeSceneItems {
+  const base = createEmptyHomeSceneItems()
+  if (!value || typeof value !== 'object') {
+    if (fallbackItemId) {
+      base.left = fallbackItemId
+    }
+    return base
+  }
+
+  for (const slot of HOME_SCENE_SLOTS) {
+    const raw = (value as Record<string, unknown>)[slot.id]
+    base[slot.id] = resolveAvatarItemId(typeof raw === 'string' ? raw : null)
+  }
+
+  if (!base.left && !base.center && !base.right && fallbackItemId) {
+    base.left = fallbackItemId
+  }
+
+  return base
+}
+
+function countInventoryItemsByCardId(inventory: InventoryItem[]): Map<AvatarItemId, number> {
+  const counts = new Map<AvatarItemId, number>()
+  for (const item of inventory) {
+    const avatarItemId = resolveAvatarItemId(item.cardId)
+    if (!avatarItemId) continue
+    counts.set(avatarItemId, (counts.get(avatarItemId) ?? 0) + 1)
+  }
+  return counts
+}
+
+function countPlacedHomeSceneItems(sceneItems: HomeSceneItems): Map<AvatarItemId, number> {
+  const counts = new Map<AvatarItemId, number>()
+  for (const slot of HOME_SCENE_SLOTS) {
+    const itemId = sceneItems[slot.id]
+    if (!itemId) continue
+    counts.set(itemId, (counts.get(itemId) ?? 0) + 1)
+  }
+  return counts
+}
+
+function sanitizeHomeSceneItemsWithInventory(sceneItems: HomeSceneItems, inventory: InventoryItem[]): HomeSceneItems {
+  const normalized = normalizeHomeSceneItems(sceneItems)
+  const availableCounts = countInventoryItemsByCardId(inventory)
+  const usedCounts = new Map<AvatarItemId, number>()
+  const next = createEmptyHomeSceneItems()
+
+  for (const slot of HOME_SCENE_SLOTS) {
+    const itemId = normalized[slot.id]
+    if (!itemId) continue
+
+    const nextUsedCount = (usedCounts.get(itemId) ?? 0) + 1
+    const availableCount = availableCounts.get(itemId) ?? 0
+    if (nextUsedCount > availableCount) continue
+
+    usedCounts.set(itemId, nextUsedCount)
+    next[slot.id] = itemId
+  }
+
+  return next
+}
+
+function isSameHomeSceneItems(a: HomeSceneItems, b: HomeSceneItems): boolean {
+  return HOME_SCENE_SLOTS.every((slot) => a[slot.id] === b[slot.id])
+}
+
 function getAvatarModelById(modelId: AvatarModelId): AvatarModelDef {
   return AVATAR_MODELS.find((model) => model.id === modelId) ?? AVATAR_MODELS[0]
+}
+
+function getAvatarFaceById(faceId: AvatarFaceId): AvatarFaceDef {
+  return AVATAR_FACES.find((face) => face.id === faceId) ?? AVATAR_FACES[0]
 }
 
 function getAvatarItemById(itemId: AvatarItemId | null | undefined): AvatarItemDef | null {
@@ -698,6 +823,68 @@ function saveAvatarModel(userId: string, modelId: AvatarModelId) {
   }
 }
 
+function loadAvatarFace(userId: string): AvatarFaceId {
+  try {
+    const raw = localStorage.getItem(`avatar_face_${userId}`)
+    return resolveAvatarFaceId(raw)
+  } catch {
+    return 'default'
+  }
+}
+
+function saveAvatarFace(userId: string, faceId: AvatarFaceId) {
+  try {
+    if (faceId === 'default') {
+      localStorage.removeItem(`avatar_face_${userId}`)
+      return
+    }
+    localStorage.setItem(`avatar_face_${userId}`, faceId)
+  } catch {
+    // ignore
+  }
+}
+
+function normalizeUnlockedAvatarFaces(faceIds: unknown): AvatarFaceId[] {
+  const normalized: AvatarFaceId[] = ['default']
+  if (!Array.isArray(faceIds)) return normalized
+
+  for (const value of faceIds) {
+    const faceId = resolveAvatarFaceId(typeof value === 'string' ? value : null)
+    if (!normalized.includes(faceId)) {
+      normalized.push(faceId)
+    }
+  }
+
+  return normalized
+}
+
+function loadUnlockedAvatarFaces(userId: string): AvatarFaceId[] {
+  try {
+    const raw = localStorage.getItem(`avatar_faces_unlocked_${userId}`)
+    if (!raw) return ['default']
+    return normalizeUnlockedAvatarFaces(JSON.parse(raw) as unknown)
+  } catch {
+    return ['default']
+  }
+}
+
+function saveUnlockedAvatarFaces(userId: string, faceIds: AvatarFaceId[]) {
+  try {
+    localStorage.setItem(
+      `avatar_faces_unlocked_${userId}`,
+      JSON.stringify(normalizeUnlockedAvatarFaces(faceIds)),
+    )
+  } catch {
+    // ignore
+  }
+}
+
+function addLocalUnlockedAvatarFace(userId: string, faceId: AvatarFaceId): AvatarFaceId[] {
+  const nextFaces = normalizeUnlockedAvatarFaces([...loadUnlockedAvatarFaces(userId), faceId])
+  saveUnlockedAvatarFaces(userId, nextFaces)
+  return nextFaces
+}
+
 function loadAvatarItem(userId: string): AvatarItemId | null {
   try {
     const raw = localStorage.getItem(`avatar_item_${userId}`)
@@ -714,6 +901,25 @@ function saveAvatarItem(userId: string, itemId: AvatarItemId | null) {
       return
     }
     localStorage.setItem(`avatar_item_${userId}`, itemId)
+  } catch {
+    // ignore
+  }
+}
+
+function loadHomeSceneItems(userId: string): HomeSceneItems {
+  try {
+    const raw = localStorage.getItem(`home_scene_items_${userId}`)
+    const fallbackItemId = loadAvatarItem(userId)
+    if (!raw) return normalizeHomeSceneItems(null, fallbackItemId)
+    return normalizeHomeSceneItems(JSON.parse(raw) as unknown, fallbackItemId)
+  } catch {
+    return normalizeHomeSceneItems(null, loadAvatarItem(userId))
+  }
+}
+
+function saveHomeSceneItems(userId: string, sceneItems: HomeSceneItems) {
+  try {
+    localStorage.setItem(`home_scene_items_${userId}`, JSON.stringify(normalizeHomeSceneItems(sceneItems)))
   } catch {
     // ignore
   }
@@ -1526,35 +1732,84 @@ function FaceIcon({ className }: { className?: string }) {
   )
 }
 
-function ItemIcon({ className }: { className?: string }) {
+function DefaultStickmanFace({
+  mouthX,
+  mouthY,
+  mouthWidth,
+  mouthHeight,
+  mouthRadius,
+}: {
+  mouthX: number
+  mouthY: number
+  mouthWidth: number
+  mouthHeight: number
+  mouthRadius: number
+}) {
   return (
-    <svg className={className} viewBox="0 0 24 24" role="presentation" aria-hidden="true">
-      <path
-        d="M8.9 7.2 16.7 15"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M8.15 8.15 6.3 5.7a1.65 1.65 0 0 1 2.34-2.34l2.46 1.85"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="m13.2 11.45 5.2 5.2a2.15 2.15 0 1 1-3.04 3.04l-5.2-5.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
+    <>
+      <circle className="stickmanCut" cx="109" cy="52" r="4.8" />
+      <circle className="stickmanCut" cx="131" cy="52" r="4.8" />
+      <rect className="stickmanCut" x={mouthX} y={mouthY} width={mouthWidth} height={mouthHeight} rx={mouthRadius} />
+    </>
   )
 }
 
-function ClassicStickman() {
+function AnnoyedStickmanFace() {
+  return (
+    <>
+      <path
+        className="stickmanCut"
+        d="
+          M 98 53
+          L 116 53
+          A 9 9 0 0 1 98 53
+          Z
+        "
+      />
+      <path
+        className="stickmanCut"
+        d="
+          M 124 53
+          L 142 53
+          A 9 9 0 0 1 124 53
+          Z
+        "
+      />
+    </>
+  )
+}
+
+function StickmanFace({
+  faceId,
+  mouthX,
+  mouthY,
+  mouthWidth,
+  mouthHeight,
+  mouthRadius,
+}: {
+  faceId: AvatarFaceId
+  mouthX: number
+  mouthY: number
+  mouthWidth: number
+  mouthHeight: number
+  mouthRadius: number
+}) {
+  if (faceId === 'annoyed_halfmoon') {
+    return <AnnoyedStickmanFace />
+  }
+
+  return (
+    <DefaultStickmanFace
+      mouthX={mouthX}
+      mouthY={mouthY}
+      mouthWidth={mouthWidth}
+      mouthHeight={mouthHeight}
+      mouthRadius={mouthRadius}
+    />
+  )
+}
+
+function ClassicStickman({ faceId = 'default' }: { faceId?: AvatarFaceId }) {
   return (
     <svg
       className="stickman"
@@ -1567,9 +1822,14 @@ function ClassicStickman() {
         {/* голова + лицо (анимируются вместе) */}
         <g className="stickmanHead">
           <circle className="stickmanPart" cx="120" cy="56" r="32" />
-          <circle className="stickmanCut" cx="109" cy="52" r="4.8" />
-          <circle className="stickmanCut" cx="131" cy="52" r="4.8" />
-          <rect className="stickmanCut" x="107" y="68" width="26" height="6" rx="3" />
+          <StickmanFace
+            faceId={faceId}
+            mouthX={107}
+            mouthY={68}
+            mouthWidth={26}
+            mouthHeight={6}
+            mouthRadius={3}
+          />
         </g>
 
         {/* руки (капли) под ~45° к телу */}
@@ -1659,7 +1919,7 @@ function ClassicStickman() {
   )
 }
 
-function LongHairStickman() {
+function LongHairStickman({ faceId = 'default' }: { faceId?: AvatarFaceId }) {
   return (
     <svg
       className="stickman"
@@ -1738,9 +1998,14 @@ function LongHairStickman() {
             strokeLinecap="round"
             fill="none"
           />
-          <circle className="stickmanCut" cx="109" cy="52" r="4.8" />
-          <circle className="stickmanCut" cx="131" cy="52" r="4.8" />
-          <rect className="stickmanCut" x="110" y="69" width="20" height="4.4" rx="2.2" />
+          <StickmanFace
+            faceId={faceId}
+            mouthX={110}
+            mouthY={69}
+            mouthWidth={20}
+            mouthHeight={4.4}
+            mouthRadius={2.2}
+          />
         </g>
 
         <g transform="translate(4 -10) translate(96 120) rotate(17) scale(0.68 1) translate(-96 -120)">
@@ -1868,12 +2133,18 @@ function LongHairStickman() {
   )
 }
 
-function Stickman({ modelId = 'classic' }: { modelId?: AvatarModelId }) {
+function Stickman({
+  modelId = 'classic',
+  faceId = 'default',
+}: {
+  modelId?: AvatarModelId
+  faceId?: AvatarFaceId
+}) {
   if (modelId === 'minimal_long_hair') {
-    return <LongHairStickman />
+    return <LongHairStickman faceId={faceId} />
   }
 
-  return <ClassicStickman />
+  return <ClassicStickman faceId={faceId} />
 }
 
 function SceneAvatarItem({
@@ -1890,6 +2161,51 @@ function SceneAvatarItem({
     <div className={className} aria-hidden="true">
       <ChromaKeyImage className="sceneAvatarItemImg" src={item.imageSrc} alt="" />
     </div>
+  )
+}
+
+function HomeSceneItemsLayer({
+  sceneItems,
+  showPlaceholders = false,
+  onPlaceholderClick,
+  classNamePrefix = 'homePlacedItem',
+}: {
+  sceneItems: HomeSceneItems
+  showPlaceholders?: boolean
+  onPlaceholderClick?: (slotId: HomeSceneSlotId) => void
+  classNamePrefix?: string
+}) {
+  return (
+    <>
+      {HOME_SCENE_SLOTS.map((slot) => {
+        const itemId = sceneItems[slot.id]
+        const placementClass = `${classNamePrefix} ${slot.placementClass}`
+
+        if (itemId) {
+          return (
+            <SceneAvatarItem
+              key={slot.id}
+              itemId={itemId}
+              className={placementClass}
+            />
+          )
+        }
+
+        if (!showPlaceholders) return null
+
+        return (
+          <button
+            key={slot.id}
+            type="button"
+            className={`homeScenePlus ${slot.placementClass}`}
+            onClick={() => onPlaceholderClick?.(slot.id)}
+            aria-label={`${slot.label}: открыть инвентарь`}
+          >
+            <span className="homeScenePlusIcon">+</span>
+          </button>
+        )
+      })}
+    </>
   )
 }
 
@@ -2175,7 +2491,7 @@ function InventoryPanel({
   return (
     <section ref={panelRef} className="panel">
       <h2>Инвентарь</h2>
-      <p className="inventoryHint">Зажмите и перетащите на другой предмет для слияния</p>
+      <p className="inventoryHint">Нажмите на предмет, чтобы поставить его на домашнюю сцену, или зажмите и перетащите для слияния</p>
       <div className="inventoryGrid" role="list">
         {inventory.map((item) => (
           <div
@@ -2450,6 +2766,16 @@ function FriendsPanel({
     [profileState?.profile?.avatarModel],
   )
 
+  const selectedFriendAvatarFace = useMemo(
+    () => getAvatarFaceById(resolveAvatarFaceId(profileState?.profile?.avatarFace)),
+    [profileState?.profile?.avatarFace],
+  )
+
+  const selectedFriendSceneItems = useMemo(
+    () => normalizeHomeSceneItems(profileState?.profile?.sceneItems, selectedFriendAvatarItem?.id ?? null),
+    [profileState?.profile?.sceneItems, selectedFriendAvatarItem?.id],
+  )
+
   const renderUserRow = (user: UserPreview, options?: { compact?: boolean }) => {
     const canAdd = user.relation === 'none' || user.relation === 'incoming'
     const canSend = transferableCards.length > 0
@@ -2671,12 +2997,15 @@ function FriendsPanel({
                       <div className="homeBackdropShade" aria-hidden="true" />
                     </>
                   )}
-                  <SceneAvatarItem
-                    itemId={selectedFriendAvatarItem?.id ?? null}
-                    className="homePlacedItem friendProfilePlacedItem"
+                  <HomeSceneItemsLayer
+                    sceneItems={selectedFriendSceneItems}
+                    classNamePrefix="homePlacedItem friendProfilePlacedItem"
                   />
                   <div className="homeAvatarWrap friendProfileAvatarWrap">
-                    <Stickman modelId={selectedFriendAvatarModel.id} />
+                    <Stickman
+                      modelId={selectedFriendAvatarModel.id}
+                      faceId={selectedFriendAvatarFace.id}
+                    />
                   </div>
                 </div>
 
@@ -2711,10 +3040,8 @@ function FriendsPanel({
                   </div>
 
                   <div className="friendProfileCard">
-                    <span className="friendProfileLabel">Предмет</span>
-                    <strong className="friendProfileValue">
-                      {selectedFriendAvatarItem?.name ?? 'Без предмета'}
-                    </strong>
+                    <span className="friendProfileLabel">Лицо</span>
+                    <strong className="friendProfileValue">{selectedFriendAvatarFace.name}</strong>
                   </div>
 
                   <div className="friendProfileCard isWide">
@@ -2769,13 +3096,6 @@ const CUSTOMIZE_CATEGORIES: CustomizeCategoryDef[] = [
     Icon: BuildIcon,
   },
   {
-    id: 'item',
-    label: 'Предмет',
-    description: 'Аксессуары и предметы в руках персонажа для бизнес-сцены.',
-    placement: 'bottomRight',
-    Icon: ItemIcon,
-  },
-  {
     id: 'face',
     label: 'Лицо',
     description: 'Настраивайте эмоции, взгляд и детали лица персонажа.',
@@ -2812,18 +3132,18 @@ function saveCustomizeCategory(userId: string, categoryId: CustomizeCategoryId) 
 
 function CustomizePanel({
   userId,
-  inventory,
   selectedAvatarModelId,
-  selectedAvatarItemId,
+  selectedAvatarFaceId,
+  availableAvatarFaceIds,
   onSelectAvatarModel,
-  onSelectAvatarItem,
+  onSelectAvatarFace,
 }: {
   userId: string
-  inventory: InventoryItem[]
   selectedAvatarModelId: AvatarModelId
-  selectedAvatarItemId: AvatarItemId | null
+  selectedAvatarFaceId: AvatarFaceId
+  availableAvatarFaceIds: AvatarFaceId[]
   onSelectAvatarModel: (modelId: AvatarModelId) => void
-  onSelectAvatarItem: (itemId: AvatarItemId | null) => void
+  onSelectAvatarFace: (faceId: AvatarFaceId) => void
 }) {
   const [activeCategoryId, setActiveCategoryId] = useState<CustomizeCategoryId>(() => loadCustomizeCategory(userId))
 
@@ -2836,13 +3156,14 @@ function CustomizePanel({
   }, [activeCategoryId, userId])
   const activeCategory = CUSTOMIZE_CATEGORIES.find((category) => category.id === activeCategoryId) ?? CUSTOMIZE_CATEGORIES[0]
   const selectedAvatarModel = getAvatarModelById(selectedAvatarModelId)
-  const selectedAvatarItem = getAvatarItemById(selectedAvatarItemId)
+  const selectedAvatarFace = getAvatarFaceById(selectedAvatarFaceId)
   const showModelPicker = activeCategory.id === 'build'
-  const showItemPicker = activeCategory.id === 'item'
-  const availableAvatarItems = useMemo(
-    () => getAvailableAvatarItems(inventory),
-    [inventory],
+  const showFacePicker = activeCategory.id === 'face'
+  const availableAvatarFaces = useMemo(
+    () => AVATAR_FACES.filter((face) => availableAvatarFaceIds.includes(face.id)),
+    [availableAvatarFaceIds],
   )
+  const hasLockedFaces = availableAvatarFaces.length < AVATAR_FACES.length
 
   return (
     <section className="panel customizePanel">
@@ -2879,7 +3200,7 @@ function CustomizePanel({
           <div className="customizeAvatarStage">
             <div className="customizeAvatarHalo" aria-hidden="true" />
             <div className="customizeAvatarCard">
-              <Stickman modelId={selectedAvatarModelId} />
+              <Stickman modelId={selectedAvatarModelId} faceId={selectedAvatarFaceId} />
             </div>
             <div className="customizeAvatarMeta">
               <span className="customizeAvatarEyebrow">Персонаж</span>
@@ -2908,7 +3229,7 @@ function CustomizePanel({
                 aria-pressed={isActive}
               >
                 <div className="avatarModelPreview">
-                  <Stickman modelId={model.id} />
+                  <Stickman modelId={model.id} faceId={selectedAvatarFaceId} />
                 </div>
                 <div className="avatarModelMeta">
                   <div className="avatarModelNameRow">
@@ -2923,64 +3244,148 @@ function CustomizePanel({
         </div>
       )}
 
-      {showItemPicker && (
-        availableAvatarItems.length > 0 ? (
-          <div className="customizeGrid">
-            <button
-              type="button"
-              className={`backgroundCard customizeItemCard ${selectedAvatarItemId === null ? 'isActive' : ''}`}
-              onClick={() => onSelectAvatarItem(null)}
-              aria-pressed={selectedAvatarItemId === null}
-            >
-              <div className="customizeItemPreview customizeItemPreview--empty" aria-hidden="true">
-                <span className="customizeItemPreviewEmpty">Без предмета</span>
-              </div>
-              <div className="backgroundMeta">
-                <div className="backgroundNameRow">
-                  <span className="backgroundName">Без предмета</span>
-                  {selectedAvatarItemId === null && <span className="backgroundBadge">Выбрано</span>}
-                </div>
-                <span className="backgroundDescription">Убирает предмет с домашней сцены.</span>
-              </div>
-            </button>
-
-            {availableAvatarItems.map((item) => {
-              const isActive = item.id === selectedAvatarItemId
+      {showFacePicker && (
+        <>
+          <div className="customizeModelGrid">
+            {availableAvatarFaces.map((face) => {
+              const isActive = face.id === selectedAvatarFaceId
               return (
                 <button
-                  key={item.id}
+                  key={face.id}
                   type="button"
-                  className={`backgroundCard customizeItemCard ${isActive ? 'isActive' : ''}`}
-                  onClick={() => onSelectAvatarItem(item.id)}
+                  className={`avatarModelCard ${isActive ? 'isActive' : ''}`}
+                  onClick={() => onSelectAvatarFace(face.id)}
                   aria-pressed={isActive}
                 >
-                  <div className="customizeItemPreview" aria-hidden="true">
-                    <ChromaKeyImage className="customizeItemPreviewImg" src={item.imageSrc} alt="" />
+                  <div className="avatarModelPreview">
+                    <Stickman modelId={selectedAvatarModelId} faceId={face.id} />
                   </div>
-                  <div className="backgroundMeta">
-                    <div className="backgroundNameRow">
-                      <span className="backgroundName">{item.name}</span>
-                      {isActive && <span className="backgroundBadge">Выбрано</span>}
+                  <div className="avatarModelMeta">
+                    <div className="avatarModelNameRow">
+                      <span className="avatarModelName">{face.name}</span>
+                      {isActive && <span className="avatarModelBadge">Выбрано</span>}
                     </div>
-                    <span className="backgroundDescription">{item.description}</span>
+                    <span className="avatarModelDescription">{face.description}</span>
                   </div>
                 </button>
               )
             })}
           </div>
-        ) : (
-          <div className="customizeLocked">
-            В магазине пока нет активных предметов для этой сцены. Купите аксессуар, и он появится здесь.
-          </div>
-        )
+
+          {hasLockedFaces && (
+            <div className="customizeLocked">
+              Новые лица открываются в магазине. Этот вариант можно купить за {ANNOYED_FACE_SHOP_PRICE} звёзд.
+            </div>
+          )}
+        </>
       )}
 
       <p className="customizeSubnote">
-        {selectedAvatarItem
-          ? `${selectedAvatarItem.name} сейчас выбран для домашней сцены.`
-          : 'Темы квартиры и другие активы остаются в инвентаре через предметы.'}
+        {selectedAvatarFace.name} сейчас выбрано для персонажа. Предметы для дома теперь ставятся напрямую из инвентаря.
       </p>
     </section>
+  )
+}
+
+function SceneItemPlacementModal({
+  item,
+  inventory,
+  sceneItems,
+  onClose,
+  onPlaceIntoSlot,
+  onClearSlot,
+}: {
+  item: InventoryItem
+  inventory: InventoryItem[]
+  sceneItems: HomeSceneItems
+  onClose: () => void
+  onPlaceIntoSlot: (slotId: HomeSceneSlotId) => void
+  onClearSlot: (slotId: HomeSceneSlotId) => void
+}) {
+  const avatarItemId = resolveAvatarItemId(item.cardId)
+  const avatarItem = getAvatarItemById(avatarItemId)
+  const ownedCounts = useMemo(() => countInventoryItemsByCardId(inventory), [inventory])
+  const placedCounts = useMemo(() => countPlacedHomeSceneItems(sceneItems), [sceneItems])
+
+  if (!avatarItemId || !avatarItem) return null
+
+  return (
+    <div className="sceneItemPickerOverlay" onClick={onClose}>
+      <div className="sceneItemPickerModal" onClick={(e) => e.stopPropagation()}>
+        <div className="sceneItemPickerHeader">
+          <div>
+            <h3>Разместить предмет</h3>
+            <p className="sceneItemPickerHint">
+              Выберите один из трёх слотов на домашней странице. Пустые места там отмечены плюсиками.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="friendTransferClose"
+            onClick={onClose}
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="sceneItemPickerCard">
+          <div className="sceneItemPickerPreview">
+            <ChromaKeyImage className="sceneItemPickerImg" src={avatarItem.imageSrc} alt="" />
+          </div>
+          <div className="sceneItemPickerMeta">
+            <div className="sceneItemPickerName">{avatarItem.name}</div>
+            <div className="sceneItemPickerCount">
+              В инвентаре: {ownedCounts.get(avatarItemId) ?? 0} • На сцене: {placedCounts.get(avatarItemId) ?? 0}
+            </div>
+          </div>
+        </div>
+
+        <div className="sceneItemSlotGrid">
+          {HOME_SCENE_SLOTS.map((slot) => {
+            const currentItem = getAvatarItemById(sceneItems[slot.id])
+            const usedWithoutCurrent = (placedCounts.get(avatarItemId) ?? 0) - (sceneItems[slot.id] === avatarItemId ? 1 : 0)
+            const availableForSlot = (ownedCounts.get(avatarItemId) ?? 0) > usedWithoutCurrent
+
+            return (
+              <div key={slot.id} className="sceneItemSlotCard">
+                <div className="sceneItemSlotLabel">{slot.label}</div>
+                <div className="sceneItemSlotContent">
+                  {currentItem ? (
+                    <div className="sceneItemSlotThumb">
+                      <ChromaKeyImage className="sceneItemSlotImg" src={currentItem.imageSrc} alt="" />
+                    </div>
+                  ) : (
+                    <div className="sceneItemSlotEmpty">+</div>
+                  )}
+                  <div className="sceneItemSlotState">
+                    {currentItem ? currentItem.name : 'Пусто'}
+                  </div>
+                </div>
+                <div className="sceneItemSlotActions">
+                  <button
+                    type="button"
+                    className="sceneItemSlotButton"
+                    onClick={() => onPlaceIntoSlot(slot.id)}
+                    disabled={!availableForSlot}
+                  >
+                    {sceneItems[slot.id] === avatarItemId ? 'Уже стоит' : 'Поставить'}
+                  </button>
+                  <button
+                    type="button"
+                    className="sceneItemSlotButton isGhost"
+                    onClick={() => onClearSlot(slot.id)}
+                    disabled={!currentItem}
+                  >
+                    Убрать
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -3960,17 +4365,21 @@ function ShopPanel({
   stars,
   hasApartment,
   hasSkylineStudio,
+  ownedAvatarFaceIds,
   onClose,
   onStarsChange,
   onInventoryReload,
+  onFaceUnlocked,
 }: {
   userId: string
   stars: string
   hasApartment: boolean
   hasSkylineStudio: boolean
+  ownedAvatarFaceIds: AvatarFaceId[]
   onClose: () => void
   onStarsChange: (nextStars: string) => void
   onInventoryReload: () => Promise<void>
+  onFaceUnlocked: (faceId: AvatarFaceId) => void
 }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [buyingItemId, setBuyingItemId] = useState<string | null>(null)
@@ -3983,15 +4392,21 @@ function ShopPanel({
     options?: {
       allowDuplicates?: boolean
       timedDurationMs?: number
+      unlockFaceId?: AvatarFaceId
     },
   ) => {
     if (buyingItemId) return
 
     const allowDuplicates = options?.allowDuplicates ?? false
     const timedDurationMs = options?.timedDurationMs ?? null
+    const unlockFaceId = options?.unlockFaceId ?? null
 
     if (alreadyOwned && !allowDuplicates) {
-      setNotice(`${itemName} уже есть в инвентаре`)
+      setNotice(
+        unlockFaceId
+          ? `${itemName} уже открыто`
+          : `${itemName} уже есть в инвентаре`,
+      )
       return
     }
 
@@ -4017,27 +4432,39 @@ function ShopPanel({
         onStarsChange(data.stars)
       }
 
-      await onInventoryReload()
-      setNotice(
-        timedDurationMs
-          ? `${itemName} добавлен на 48 часов`
-          : `${itemName} добавлена в инвентарь`,
-      )
+      if (unlockFaceId) {
+        onFaceUnlocked(unlockFaceId)
+        setNotice(`${itemName} добавлено в кастомизацию`)
+      } else {
+        await onInventoryReload()
+        setNotice(
+          timedDurationMs
+            ? `${itemName} добавлен на 48 часов`
+            : `${itemName} добавлена в инвентарь`,
+        )
+      }
     } catch {
       const currentStars = Number(stars)
       if (Number.isFinite(currentStars) && currentStars >= price) {
         const nextStars = String(currentStars - price)
-        if (timedDurationMs) {
+        if (unlockFaceId) {
+          addLocalUnlockedAvatarFace(userId, unlockFaceId)
+          onFaceUnlocked(unlockFaceId)
+        } else if (timedDurationMs) {
           addLocalTimedInventoryItem(userId, itemId, Date.now() + timedDurationMs)
         } else {
           upsertLocalCard(userId, itemId, 1)
         }
         onStarsChange(nextStars)
-        await onInventoryReload()
+        if (!unlockFaceId) {
+          await onInventoryReload()
+        }
         setNotice(
-          timedDurationMs
-            ? `${itemName} куплен локально на 48 часов`
-            : `${itemName} куплена локально`,
+          unlockFaceId
+            ? `${itemName} открыто локально`
+            : timedDurationMs
+              ? `${itemName} куплен локально на 48 часов`
+              : `${itemName} куплена локально`,
         )
       } else {
         setNotice('Недостаточно звёзд для покупки')
@@ -4045,7 +4472,9 @@ function ShopPanel({
     } finally {
       setBuyingItemId(null)
     }
-  }, [buyingItemId, onInventoryReload, onStarsChange, stars, userId])
+  }, [buyingItemId, onFaceUnlocked, onInventoryReload, onStarsChange, stars, userId])
+
+  const hasAnnoyedFace = ownedAvatarFaceIds.includes('annoyed_halfmoon')
 
   return (
     <div className="shopPanelOverlay" onClick={onClose}>
@@ -4053,7 +4482,7 @@ function ShopPanel({
         <div className="shopPanelHeader">
           <div>
             <h3>Магазин</h3>
-            <p className="shopPanelHint">Здесь можно покупать жильё и временные предметы для домашней сцены.</p>
+            <p className="shopPanelHint">Здесь можно покупать жильё, новые лица и временные предметы для домашней сцены.</p>
           </div>
           <button
             type="button"
@@ -4068,6 +4497,37 @@ function ShopPanel({
         {notice && <div className="businessNotice">{notice}</div>}
 
         <div className="shopList">
+          <article className="shopCard">
+            <div className="shopCardArt" aria-hidden="true">
+              <div className="shopFacePreview">
+                <Stickman modelId="classic" faceId="annoyed_halfmoon" />
+              </div>
+            </div>
+            <div className="shopCardBody">
+              <div className="shopCardTitleRow">
+                <div className="shopCardTitle">Недовольное лицо</div>
+                <div className="shopCardPrice">{formatStars(String(ANNOYED_FACE_SHOP_PRICE))}</div>
+              </div>
+              <p className="shopCardDescription">
+                Добавляет в раздел «Лицо» новую вариацию с полукруглыми глазами без рта.
+              </p>
+              <button
+                type="button"
+                className="shopBuyButton"
+                onClick={() => void handleBuyShopItem(
+                  ANNOYED_FACE_SHOP_ITEM_ID,
+                  ANNOYED_FACE_SHOP_PRICE,
+                  'Недовольное лицо',
+                  hasAnnoyedFace,
+                  { unlockFaceId: 'annoyed_halfmoon' },
+                )}
+                disabled={buyingItemId !== null || hasAnnoyedFace}
+              >
+                {hasAnnoyedFace ? 'Уже куплено' : buyingItemId === ANNOYED_FACE_SHOP_ITEM_ID ? 'Покупаем...' : 'Купить'}
+              </button>
+            </div>
+          </article>
+
           <article className="shopCard">
             <div className="shopCardArt" aria-hidden="true">
               <img className="shopCardImg" src="/home-bg-apartment-sunrise.svg" alt="" />
@@ -4124,7 +4584,7 @@ function ShopPanel({
                 <div className="shopCardPrice">{formatStars(String(HUGE_BOUQUET_SHOP_PRICE))}</div>
               </div>
               <p className="shopCardDescription">
-                Временный предмет для кастомизации. После покупки доступен в инвентаре и разделе «Предмет» 48 часов.
+                Временный предмет для домашней сцены. После покупки доступен в инвентаре 48 часов и ставится прямо оттуда.
               </p>
               <button
                 type="button"
@@ -4827,9 +5287,13 @@ function App() {
   const [stars, setStars] = useState('0')
   const [businessMode, setBusinessMode] = useState<BusinessMode>('none')
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(() => loadLocalBusiness(userId))
-  const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
   const [selectedAvatarModelId, setSelectedAvatarModelId] = useState<AvatarModelId>(() => loadAvatarModel(userId))
+  const [selectedAvatarFaceId, setSelectedAvatarFaceId] = useState<AvatarFaceId>(() => loadAvatarFace(userId))
   const [selectedAvatarItemId, setSelectedAvatarItemId] = useState<AvatarItemId | null>(() => loadAvatarItem(userId))
+  const [homeSceneItems, setHomeSceneItems] = useState<HomeSceneItems>(() => loadHomeSceneItems(userId))
+  const [sceneItemPickerItem, setSceneItemPickerItem] = useState<InventoryItem | null>(null)
+  const [ownedAvatarFaceIds, setOwnedAvatarFaceIds] = useState<AvatarFaceId[]>(() => loadUnlockedAvatarFaces(userId))
+  const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
   const hasApartment = useMemo(
     () => inventory.some((item) => item.cardId === APARTMENT_CARD_ID),
     [inventory]
@@ -4846,9 +5310,13 @@ function App() {
     () => getAvailableAvatarItems(inventory),
     [inventory],
   )
-  const activeAvatarItem = useMemo(
-    () => getAvatarItemById(selectedAvatarItemId),
-    [selectedAvatarItemId],
+  const activeAvatarFace = useMemo(
+    () => getAvatarFaceById(selectedAvatarFaceId),
+    [selectedAvatarFaceId],
+  )
+  const activeHomeSceneItems = useMemo(
+    () => sanitizeHomeSceneItemsWithInventory(homeSceneItems, inventory),
+    [homeSceneItems, inventory],
   )
   const activeHomeBackground = useMemo(
     () => {
@@ -4858,6 +5326,39 @@ function App() {
     },
     [availableHomeBackgrounds, selectedHomeBackgroundId]
   )
+
+  const applyProfileSnapshot = useCallback((data: {
+    stars?: string
+    avatarModel?: string | null
+    avatarFace?: string | null
+    avatarItem?: string | null
+    homeBackground?: string | null
+    unlockedFaces?: string[] | null
+    sceneItems?: unknown
+  }, fallbackStars?: string) => {
+    const nextStars = typeof data.stars === 'string' ? data.stars : (fallbackStars ?? stars)
+    const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
+    const nextAvatarFace = resolveAvatarFaceId(data.avatarFace)
+    const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
+    const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
+    const nextUnlockedFaces = normalizeUnlockedAvatarFaces(data.unlockedFaces)
+    const nextSceneItems = normalizeHomeSceneItems(data.sceneItems, nextAvatarItem)
+
+    setStars(nextStars)
+    saveLocalStars(userId, nextStars)
+    setSelectedAvatarModelId(nextAvatarModel)
+    saveAvatarModel(userId, nextAvatarModel)
+    setSelectedAvatarFaceId(nextUnlockedFaces.includes(nextAvatarFace) ? nextAvatarFace : 'default')
+    saveAvatarFace(userId, nextUnlockedFaces.includes(nextAvatarFace) ? nextAvatarFace : 'default')
+    setSelectedAvatarItemId(nextAvatarItem)
+    saveAvatarItem(userId, nextAvatarItem)
+    setOwnedAvatarFaceIds(nextUnlockedFaces)
+    saveUnlockedAvatarFaces(userId, nextUnlockedFaces)
+    setHomeSceneItems(nextSceneItems)
+    saveHomeSceneItems(userId, nextSceneItems)
+    setSelectedHomeBackgroundId(nextHomeBackground)
+    saveHomeBackground(userId, nextHomeBackground)
+  }, [stars, userId])
 
   useEffect(() => {
     if (!isAnonymousUserId(userId)) return
@@ -4943,7 +5444,9 @@ function App() {
           username: telegramIdentity.username,
           displayName: telegramIdentity.displayName,
           avatarModel: selectedAvatarModelId,
+          avatarFace: selectedAvatarFaceId,
           avatarItem: selectedAvatarItemId,
+          sceneItems: homeSceneItems,
           homeBackground: selectedHomeBackgroundId,
         }),
       })
@@ -4952,26 +5455,18 @@ function App() {
         userId: string
         stars: string
         avatarModel?: string | null
+        avatarFace?: string | null
         avatarItem?: string | null
         homeBackground?: string | null
+        unlockedFaces?: string[] | null
+        sceneItems?: unknown
       }
-      const nextStars = typeof data.stars === 'string' ? data.stars : fallbackStars
-      const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
-      const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
-      const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
-      setStars(nextStars)
-      saveLocalStars(userId, nextStars)
-      setSelectedAvatarModelId(nextAvatarModel)
-      saveAvatarModel(userId, nextAvatarModel)
-      setSelectedAvatarItemId(nextAvatarItem)
-      saveAvatarItem(userId, nextAvatarItem)
-      setSelectedHomeBackgroundId(nextHomeBackground)
-      saveHomeBackground(userId, nextHomeBackground)
+      applyProfileSnapshot(data, fallbackStars)
       pendingMigrationUserIdRef.current = null
     } catch {
       setStars(fallbackStars)
     }
-  }, [selectedAvatarItemId, selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [applyProfileSnapshot, homeSceneItems, selectedAvatarFaceId, selectedAvatarItemId, selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const handleSelectAvatarModel = useCallback((modelId: AvatarModelId) => {
     setSelectedAvatarModelId(modelId)
@@ -4987,7 +5482,9 @@ function App() {
             username: telegramIdentity.username,
             displayName: telegramIdentity.displayName,
             avatarModel: modelId,
+            avatarFace: selectedAvatarFaceId,
             avatarItem: selectedAvatarItemId,
+            sceneItems: homeSceneItems,
             homeBackground: selectedHomeBackgroundId,
           }),
         })
@@ -4995,31 +5492,23 @@ function App() {
         const data = (await r.json()) as {
           stars?: string
           avatarModel?: string | null
+          avatarFace?: string | null
           avatarItem?: string | null
           homeBackground?: string | null
+          unlockedFaces?: string[] | null
+          sceneItems?: unknown
         }
-        const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
-        const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
-        const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
-        setSelectedAvatarModelId(nextAvatarModel)
-        saveAvatarModel(userId, nextAvatarModel)
-        setSelectedAvatarItemId(nextAvatarItem)
-        saveAvatarItem(userId, nextAvatarItem)
-        setSelectedHomeBackgroundId(nextHomeBackground)
-        saveHomeBackground(userId, nextHomeBackground)
-        if (typeof data.stars === 'string') {
-          setStars(data.stars)
-          saveLocalStars(userId, data.stars)
-        }
+        applyProfileSnapshot(data)
       } catch {
         // local preview already updated
       }
     })()
-  }, [selectedAvatarItemId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [applyProfileSnapshot, homeSceneItems, selectedAvatarFaceId, selectedAvatarItemId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
-  const handleSelectAvatarItem = useCallback((itemId: AvatarItemId | null) => {
-    setSelectedAvatarItemId(itemId)
-    saveAvatarItem(userId, itemId)
+  const handleSelectAvatarFace = useCallback((faceId: AvatarFaceId) => {
+    if (!ownedAvatarFaceIds.includes(faceId)) return
+    setSelectedAvatarFaceId(faceId)
+    saveAvatarFace(userId, faceId)
 
     void (async () => {
       try {
@@ -5031,7 +5520,9 @@ function App() {
             username: telegramIdentity.username,
             displayName: telegramIdentity.displayName,
             avatarModel: selectedAvatarModelId,
-            avatarItem: itemId,
+            avatarFace: faceId,
+            avatarItem: selectedAvatarItemId,
+            sceneItems: homeSceneItems,
             homeBackground: selectedHomeBackgroundId,
           }),
         })
@@ -5039,27 +5530,18 @@ function App() {
         const data = (await r.json()) as {
           stars?: string
           avatarModel?: string | null
+          avatarFace?: string | null
           avatarItem?: string | null
           homeBackground?: string | null
+          unlockedFaces?: string[] | null
+          sceneItems?: unknown
         }
-        const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
-        const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
-        const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
-        setSelectedAvatarModelId(nextAvatarModel)
-        saveAvatarModel(userId, nextAvatarModel)
-        setSelectedAvatarItemId(nextAvatarItem)
-        saveAvatarItem(userId, nextAvatarItem)
-        setSelectedHomeBackgroundId(nextHomeBackground)
-        saveHomeBackground(userId, nextHomeBackground)
-        if (typeof data.stars === 'string') {
-          setStars(data.stars)
-          saveLocalStars(userId, data.stars)
-        }
+        applyProfileSnapshot(data)
       } catch {
         // local preview already updated
       }
     })()
-  }, [selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [applyProfileSnapshot, homeSceneItems, ownedAvatarFaceIds, selectedAvatarItemId, selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const handleSelectHomeBackground = useCallback((backgroundId: HomeBackgroundId) => {
     setSelectedHomeBackgroundId(backgroundId)
@@ -5075,7 +5557,9 @@ function App() {
             username: telegramIdentity.username,
             displayName: telegramIdentity.displayName,
             avatarModel: selectedAvatarModelId,
+            avatarFace: selectedAvatarFaceId,
             avatarItem: selectedAvatarItemId,
+            sceneItems: homeSceneItems,
             homeBackground: backgroundId,
           }),
         })
@@ -5083,27 +5567,82 @@ function App() {
         const data = (await r.json()) as {
           stars?: string
           avatarModel?: string | null
+          avatarFace?: string | null
           avatarItem?: string | null
           homeBackground?: string | null
+          unlockedFaces?: string[] | null
+          sceneItems?: unknown
         }
-        const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
-        const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
-        const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
-        setSelectedAvatarModelId(nextAvatarModel)
-        saveAvatarModel(userId, nextAvatarModel)
-        setSelectedAvatarItemId(nextAvatarItem)
-        saveAvatarItem(userId, nextAvatarItem)
-        setSelectedHomeBackgroundId(nextHomeBackground)
-        saveHomeBackground(userId, nextHomeBackground)
-        if (typeof data.stars === 'string') {
-          setStars(data.stars)
-          saveLocalStars(userId, data.stars)
-        }
+        applyProfileSnapshot(data)
       } catch {
         // local preview already updated
       }
     })()
-  }, [selectedAvatarItemId, selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [applyProfileSnapshot, homeSceneItems, selectedAvatarFaceId, selectedAvatarItemId, selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
+
+  const syncHomeSceneItems = useCallback((nextSceneItems: HomeSceneItems) => {
+    setHomeSceneItems(nextSceneItems)
+    saveHomeSceneItems(userId, nextSceneItems)
+
+    void (async () => {
+      try {
+        const r = await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            username: telegramIdentity.username,
+            displayName: telegramIdentity.displayName,
+            avatarModel: selectedAvatarModelId,
+            avatarFace: selectedAvatarFaceId,
+            avatarItem: selectedAvatarItemId,
+            sceneItems: nextSceneItems,
+            homeBackground: selectedHomeBackgroundId,
+          }),
+        })
+        if (!r.ok) return
+        const data = (await r.json()) as {
+          stars?: string
+          avatarModel?: string | null
+          avatarFace?: string | null
+          avatarItem?: string | null
+          homeBackground?: string | null
+          unlockedFaces?: string[] | null
+          sceneItems?: unknown
+        }
+        applyProfileSnapshot(data)
+      } catch {
+        // local state already updated
+      }
+    })()
+  }, [applyProfileSnapshot, selectedAvatarFaceId, selectedAvatarItemId, selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
+
+  const handlePlaceSceneItemIntoSlot = useCallback((slotId: HomeSceneSlotId) => {
+    if (!sceneItemPickerItem) return
+    const nextItemId = resolveAvatarItemId(sceneItemPickerItem.cardId)
+    if (!nextItemId) return
+
+    const availableCounts = countInventoryItemsByCardId(inventory)
+    const placedCounts = countPlacedHomeSceneItems(homeSceneItems)
+    const usedWithoutCurrent = (placedCounts.get(nextItemId) ?? 0) - (homeSceneItems[slotId] === nextItemId ? 1 : 0)
+    if ((availableCounts.get(nextItemId) ?? 0) <= usedWithoutCurrent) return
+
+    const nextSceneItems = {
+      ...homeSceneItems,
+      [slotId]: nextItemId,
+    }
+    syncHomeSceneItems(nextSceneItems)
+    setSceneItemPickerItem(null)
+  }, [homeSceneItems, inventory, sceneItemPickerItem, syncHomeSceneItems])
+
+  const handleClearSceneSlot = useCallback((slotId: HomeSceneSlotId) => {
+    if (!homeSceneItems[slotId]) return
+    const nextSceneItems = {
+      ...homeSceneItems,
+      [slotId]: null,
+    }
+    syncHomeSceneItems(nextSceneItems)
+  }, [homeSceneItems, syncHomeSceneItems])
 
   const loadInventory = useCallback(async () => {
     ensureLocalInventoryMigration(userId)
@@ -5287,6 +5826,32 @@ function App() {
   useEffect(() => {
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
   }, [userId])
+
+  useEffect(() => {
+    setSelectedAvatarFaceId(loadAvatarFace(userId))
+    setOwnedAvatarFaceIds(loadUnlockedAvatarFaces(userId))
+    setHomeSceneItems(loadHomeSceneItems(userId))
+  }, [userId])
+
+  useEffect(() => {
+    if (ownedAvatarFaceIds.includes(selectedAvatarFaceId)) return
+    setSelectedAvatarFaceId('default')
+    saveAvatarFace(userId, 'default')
+  }, [ownedAvatarFaceIds, selectedAvatarFaceId, userId])
+
+  useEffect(() => {
+    if (!inventoryLoaded) return
+    const sanitizedSceneItems = sanitizeHomeSceneItemsWithInventory(homeSceneItems, inventory)
+    if (isSameHomeSceneItems(sanitizedSceneItems, homeSceneItems)) return
+    syncHomeSceneItems(sanitizedSceneItems)
+  }, [homeSceneItems, inventory, inventoryLoaded, syncHomeSceneItems])
+
+  useEffect(() => {
+    if (!sceneItemPickerItem) return
+    const stillOwned = inventory.some((item) => item.id === sceneItemPickerItem.id)
+    if (stillOwned) return
+    setSceneItemPickerItem(null)
+  }, [inventory, sceneItemPickerItem])
 
   const packRemainingMs = packNextOpenAt ? Math.max(0, packNextOpenAt - packNow) : 0
   const isPackReady = packRemainingMs === 0
@@ -5497,9 +6062,13 @@ function App() {
                   <div className="homeBackdropShade" aria-hidden="true" />
                 </>
               )}
-              <SceneAvatarItem itemId={activeAvatarItem?.id ?? null} className="homePlacedItem" />
+              <HomeSceneItemsLayer
+                sceneItems={activeHomeSceneItems}
+                showPlaceholders
+                onPlaceholderClick={() => setTab('inventory')}
+              />
               <div className="homeAvatarWrap">
-                <Stickman modelId={selectedAvatarModelId} />
+                <Stickman modelId={selectedAvatarModelId} faceId={activeAvatarFace.id} />
               </div>
             </div>
             <button
@@ -5592,6 +6161,11 @@ function App() {
             onItemTap={(item) => {
               if (item.cardId === APARTMENT_CARD_ID || item.cardId === SKYLINE_STUDIO_CARD_ID) {
                 setIsApartmentThemeOpen(true)
+                return
+              }
+
+              if (getAvatarItemById(resolveAvatarItemId(item.cardId))) {
+                setSceneItemPickerItem(item)
               }
             }}
           />
@@ -5608,11 +6182,11 @@ function App() {
         {tab === 'customize' && (
           <CustomizePanel
             userId={userId}
-            inventory={inventory}
             selectedAvatarModelId={selectedAvatarModelId}
-            selectedAvatarItemId={selectedAvatarItemId}
+            selectedAvatarFaceId={selectedAvatarFaceId}
+            availableAvatarFaceIds={ownedAvatarFaceIds}
             onSelectAvatarModel={handleSelectAvatarModel}
-            onSelectAvatarItem={handleSelectAvatarItem}
+            onSelectAvatarFace={handleSelectAvatarFace}
           />
         )}
 
@@ -5763,12 +6337,29 @@ function App() {
           stars={stars}
           hasApartment={hasApartment}
           hasSkylineStudio={hasSkylineStudio}
+          ownedAvatarFaceIds={ownedAvatarFaceIds}
           onClose={() => setIsShopOpen(false)}
           onStarsChange={(nextStars) => {
             setStars(nextStars)
             saveLocalStars(userId, nextStars)
           }}
           onInventoryReload={loadInventory}
+          onFaceUnlocked={(faceId) => {
+            const nextFaces = normalizeUnlockedAvatarFaces([...ownedAvatarFaceIds, faceId])
+            setOwnedAvatarFaceIds(nextFaces)
+            saveUnlockedAvatarFaces(userId, nextFaces)
+          }}
+        />
+      )}
+
+      {sceneItemPickerItem && (
+        <SceneItemPlacementModal
+          item={sceneItemPickerItem}
+          inventory={inventory}
+          sceneItems={activeHomeSceneItems}
+          onClose={() => setSceneItemPickerItem(null)}
+          onPlaceIntoSlot={handlePlaceSceneItemIntoSlot}
+          onClearSlot={handleClearSceneSlot}
         />
       )}
 

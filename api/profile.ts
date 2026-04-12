@@ -12,6 +12,33 @@ export const config = {
   runtime: 'nodejs',
 }
 
+function normalizeSceneItems(value: unknown) {
+  const base = {
+    left: null,
+    center: null,
+    right: null,
+  } as Record<'left' | 'center' | 'right', string | null>
+
+  if (!value || typeof value !== 'object') return base
+
+  for (const slotId of ['left', 'center', 'right'] as const) {
+    base[slotId] = typeof (value as Record<string, unknown>)[slotId] === 'string'
+      ? ((value as Record<string, unknown>)[slotId] as string)
+      : null
+  }
+
+  return base
+}
+
+function parseSceneItems(value: string | null | undefined) {
+  if (typeof value !== 'string') return normalizeSceneItems(null)
+  try {
+    return normalizeSceneItems(JSON.parse(value) as unknown)
+  } catch {
+    return normalizeSceneItems(null)
+  }
+}
+
 export default async function handler(req: NodeApiRequest, res: NodeApiResponse): Promise<void> {
   if (req.method === 'POST') {
     const body = await readJsonBody<
@@ -21,7 +48,9 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
           username?: string | null
           displayName?: string | null
           avatarModel?: string | null
+          avatarFace?: string | null
           avatarItem?: string | null
+          sceneItems?: Record<string, string | null> | null
           homeBackground?: string | null
         }
       | null
@@ -41,7 +70,9 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
       username: body?.username,
       displayName: body?.displayName,
       avatarModel: body?.avatarModel,
+      avatarFace: body?.avatarFace,
       avatarItem: body?.avatarItem,
+      sceneItems: body?.sceneItems,
       homeBackground: body?.homeBackground,
     })
 
@@ -57,8 +88,14 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
       displayName: profile.display_name,
       stars: profile.stars,
       avatarModel: profile.avatar_model ?? 'classic',
+      avatarFace: profile.avatar_face ?? 'default',
       avatarItem: profile.avatar_item ?? null,
       homeBackground: profile.home_background ?? null,
+      sceneItems: parseSceneItems(profile.scene_items),
+      unlockedFaces: [
+        'default',
+        ...(profile.face_annoyed_unlocked ? ['annoyed_halfmoon'] : []),
+      ],
     })
     return
   }
@@ -88,7 +125,13 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
     displayName: profile.display_name,
     stars: profile.stars,
     avatarModel: profile.avatar_model ?? 'classic',
+    avatarFace: profile.avatar_face ?? 'default',
     avatarItem: profile.avatar_item ?? null,
     homeBackground: profile.home_background ?? null,
+    sceneItems: parseSceneItems(profile.scene_items),
+    unlockedFaces: [
+      'default',
+      ...(profile.face_annoyed_unlocked ? ['annoyed_halfmoon'] : []),
+    ],
   })
 }
