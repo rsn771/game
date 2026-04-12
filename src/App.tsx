@@ -198,6 +198,7 @@ type PublicUserProfile = {
   stars: string
   avatarModel: AvatarModelId
   avatarItem: AvatarItemId | null
+  homeBackground: HomeBackgroundId | null
 }
 
 type FriendProfileState = {
@@ -746,6 +747,13 @@ function getHomeBackgroundById(backgroundId: HomeBackgroundId): HomeBackgroundDe
   return HOME_BACKGROUNDS.find((background) => background.id === backgroundId) ?? null
 }
 
+function resolveHomeBackgroundId(value: string | null | undefined): HomeBackgroundId {
+  if (value === 'none') return 'none'
+  return HOME_BACKGROUNDS.some((background) => background.id === value)
+    ? (value as HomeBackgroundId)
+    : 'none'
+}
+
 function getOwnedHomeBackgrounds(inventory: InventoryItem[]): HomeBackgroundDef[] {
   const ownedCardIds = new Set(inventory.map((item) => item.cardId))
   return HOME_BACKGROUNDS.filter((background) => ownedCardIds.has(background.requiredCardId))
@@ -760,9 +768,7 @@ function loadHomeBackground(userId: string): HomeBackgroundId {
   try {
     const raw = localStorage.getItem(`home_background_${userId}`)
     if (!raw) return 'none'
-    return HOME_BACKGROUNDS.some((background) => background.id === raw)
-      ? (raw as HomeBackgroundId)
-      : 'none'
+    return resolveHomeBackgroundId(raw)
   } catch {
     return 'none'
   }
@@ -2404,9 +2410,12 @@ function FriendsPanel({
 
     if (profileRequestIdRef.current !== requestId) return
 
-    const hasHome = Boolean(inventoryData?.items?.some((item) => (
-      item.card_id === APARTMENT_CARD_ID || item.card_id === SKYLINE_STUDIO_CARD_ID
-    )))
+    const hasHome = Boolean(
+      profileData?.homeBackground && profileData.homeBackground !== 'none'
+      || inventoryData?.items?.some((item) => (
+        item.card_id === APARTMENT_CARD_ID || item.card_id === SKYLINE_STUDIO_CARD_ID
+      ))
+    )
 
     setProfileState({
       preview: target,
@@ -2425,6 +2434,21 @@ function FriendsPanel({
     setProfileError(null)
     setLoadingProfile(false)
   }, [])
+
+  const selectedFriendHomeBackground = useMemo(() => {
+    const backgroundId = resolveHomeBackgroundId(profileState?.profile?.homeBackground)
+    return backgroundId === 'none' ? null : getHomeBackgroundById(backgroundId)
+  }, [profileState?.profile?.homeBackground])
+
+  const selectedFriendAvatarItem = useMemo(
+    () => getAvatarItemById(resolveAvatarItemId(profileState?.profile?.avatarItem)),
+    [profileState?.profile?.avatarItem],
+  )
+
+  const selectedFriendAvatarModel = useMemo(
+    () => getAvatarModelById(resolveAvatarModelId(profileState?.profile?.avatarModel)),
+    [profileState?.profile?.avatarModel],
+  )
 
   const renderUserRow = (user: UserPreview, options?: { compact?: boolean }) => {
     const canAdd = user.relation === 'none' || user.relation === 'incoming'
@@ -2617,23 +2641,42 @@ function FriendsPanel({
               <div className="friendsEmpty">Загружаем профиль...</div>
             ) : (
               <>
-                <div className={`friendProfileStage ${profileState?.hasHome ? 'hasBackground' : ''}`}>
-                  {profileState?.hasHome && (
+                <div className={`friendProfileStage ${selectedFriendHomeBackground ? 'hasBackground' : ''}`}>
+                  {selectedFriendHomeBackground && (
                     <>
                       <div
-                        className="friendProfileBackdrop"
-                        style={{ backgroundImage: `url(${HOME_BACKGROUNDS[0]?.imageSrc ?? ''})` }}
+                        className="homeBackdrop"
+                        style={{ backgroundImage: `url(${selectedFriendHomeBackground.imageSrc})` }}
                         aria-hidden="true"
                       />
-                      <div className="friendProfileBackdropShade" aria-hidden="true" />
+                      {selectedFriendHomeBackground.id === 'apartment_midnight' && (
+                        <div className="homeNightStars" aria-hidden="true">
+                          {NIGHT_LOFT_STARS.map((star, index) => (
+                            <span
+                              key={`${star.left}-${star.top}-${index}`}
+                              className="homeNightStar"
+                              style={{
+                                left: star.left,
+                                top: star.top,
+                                width: `${star.size}px`,
+                                height: `${star.size}px`,
+                                animationDelay: star.delay,
+                                animationDuration: star.duration,
+                                opacity: star.opacity,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <div className="homeBackdropShade" aria-hidden="true" />
                     </>
                   )}
-                  <div className="friendProfileAvatarWrap">
-                    <SceneAvatarItem
-                      itemId={resolveAvatarItemId(profileState?.profile?.avatarItem)}
-                      className="friendProfilePlacedItem"
-                    />
-                    <Stickman modelId={resolveAvatarModelId(profileState?.profile?.avatarModel)} />
+                  <SceneAvatarItem
+                    itemId={selectedFriendAvatarItem?.id ?? null}
+                    className="homePlacedItem friendProfilePlacedItem"
+                  />
+                  <div className="homeAvatarWrap friendProfileAvatarWrap">
+                    <Stickman modelId={selectedFriendAvatarModel.id} />
                   </div>
                 </div>
 
@@ -2654,7 +2697,23 @@ function FriendsPanel({
                   <div className="friendProfileCard">
                     <span className="friendProfileLabel">Жильё</span>
                     <strong className="friendProfileValue">
-                      {profileState?.hasHome ? 'Есть жильё' : 'Стандартная сцена'}
+                      {selectedFriendHomeBackground
+                        ? selectedFriendHomeBackground.name
+                        : profileState?.hasHome
+                          ? 'Жильё есть, но не выбрано'
+                          : 'Стандартная сцена'}
+                    </strong>
+                  </div>
+
+                  <div className="friendProfileCard">
+                    <span className="friendProfileLabel">Моделька</span>
+                    <strong className="friendProfileValue">{selectedFriendAvatarModel.name}</strong>
+                  </div>
+
+                  <div className="friendProfileCard">
+                    <span className="friendProfileLabel">Предмет</span>
+                    <strong className="friendProfileValue">
+                      {selectedFriendAvatarItem?.name ?? 'Без предмета'}
                     </strong>
                   </div>
 
@@ -4885,24 +4944,34 @@ function App() {
           displayName: telegramIdentity.displayName,
           avatarModel: selectedAvatarModelId,
           avatarItem: selectedAvatarItemId,
+          homeBackground: selectedHomeBackgroundId,
         }),
       })
       if (!r.ok) return
-      const data = (await r.json()) as { userId: string; stars: string; avatarModel?: string | null; avatarItem?: string | null }
+      const data = (await r.json()) as {
+        userId: string
+        stars: string
+        avatarModel?: string | null
+        avatarItem?: string | null
+        homeBackground?: string | null
+      }
       const nextStars = typeof data.stars === 'string' ? data.stars : fallbackStars
       const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
       const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
+      const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
       setStars(nextStars)
       saveLocalStars(userId, nextStars)
       setSelectedAvatarModelId(nextAvatarModel)
       saveAvatarModel(userId, nextAvatarModel)
       setSelectedAvatarItemId(nextAvatarItem)
       saveAvatarItem(userId, nextAvatarItem)
+      setSelectedHomeBackgroundId(nextHomeBackground)
+      saveHomeBackground(userId, nextHomeBackground)
       pendingMigrationUserIdRef.current = null
     } catch {
       setStars(fallbackStars)
     }
-  }, [selectedAvatarItemId, selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [selectedAvatarItemId, selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const handleSelectAvatarModel = useCallback((modelId: AvatarModelId) => {
     setSelectedAvatarModelId(modelId)
@@ -4919,16 +4988,25 @@ function App() {
             displayName: telegramIdentity.displayName,
             avatarModel: modelId,
             avatarItem: selectedAvatarItemId,
+            homeBackground: selectedHomeBackgroundId,
           }),
         })
         if (!r.ok) return
-        const data = (await r.json()) as { stars?: string; avatarModel?: string | null; avatarItem?: string | null }
+        const data = (await r.json()) as {
+          stars?: string
+          avatarModel?: string | null
+          avatarItem?: string | null
+          homeBackground?: string | null
+        }
         const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
         const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
+        const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
         setSelectedAvatarModelId(nextAvatarModel)
         saveAvatarModel(userId, nextAvatarModel)
         setSelectedAvatarItemId(nextAvatarItem)
         saveAvatarItem(userId, nextAvatarItem)
+        setSelectedHomeBackgroundId(nextHomeBackground)
+        saveHomeBackground(userId, nextHomeBackground)
         if (typeof data.stars === 'string') {
           setStars(data.stars)
           saveLocalStars(userId, data.stars)
@@ -4937,7 +5015,7 @@ function App() {
         // local preview already updated
       }
     })()
-  }, [selectedAvatarItemId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [selectedAvatarItemId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const handleSelectAvatarItem = useCallback((itemId: AvatarItemId | null) => {
     setSelectedAvatarItemId(itemId)
@@ -4954,16 +5032,25 @@ function App() {
             displayName: telegramIdentity.displayName,
             avatarModel: selectedAvatarModelId,
             avatarItem: itemId,
+            homeBackground: selectedHomeBackgroundId,
           }),
         })
         if (!r.ok) return
-        const data = (await r.json()) as { stars?: string; avatarModel?: string | null; avatarItem?: string | null }
+        const data = (await r.json()) as {
+          stars?: string
+          avatarModel?: string | null
+          avatarItem?: string | null
+          homeBackground?: string | null
+        }
         const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
         const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
+        const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
         setSelectedAvatarModelId(nextAvatarModel)
         saveAvatarModel(userId, nextAvatarModel)
         setSelectedAvatarItemId(nextAvatarItem)
         saveAvatarItem(userId, nextAvatarItem)
+        setSelectedHomeBackgroundId(nextHomeBackground)
+        saveHomeBackground(userId, nextHomeBackground)
         if (typeof data.stars === 'string') {
           setStars(data.stars)
           saveLocalStars(userId, data.stars)
@@ -4972,7 +5059,51 @@ function App() {
         // local preview already updated
       }
     })()
-  }, [selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
+
+  const handleSelectHomeBackground = useCallback((backgroundId: HomeBackgroundId) => {
+    setSelectedHomeBackgroundId(backgroundId)
+    saveHomeBackground(userId, backgroundId)
+
+    void (async () => {
+      try {
+        const r = await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            username: telegramIdentity.username,
+            displayName: telegramIdentity.displayName,
+            avatarModel: selectedAvatarModelId,
+            avatarItem: selectedAvatarItemId,
+            homeBackground: backgroundId,
+          }),
+        })
+        if (!r.ok) return
+        const data = (await r.json()) as {
+          stars?: string
+          avatarModel?: string | null
+          avatarItem?: string | null
+          homeBackground?: string | null
+        }
+        const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
+        const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
+        const nextHomeBackground = resolveHomeBackgroundId(data.homeBackground)
+        setSelectedAvatarModelId(nextAvatarModel)
+        saveAvatarModel(userId, nextAvatarModel)
+        setSelectedAvatarItemId(nextAvatarItem)
+        saveAvatarItem(userId, nextAvatarItem)
+        setSelectedHomeBackgroundId(nextHomeBackground)
+        saveHomeBackground(userId, nextHomeBackground)
+        if (typeof data.stars === 'string') {
+          setStars(data.stars)
+          saveLocalStars(userId, data.stars)
+        }
+      } catch {
+        // local preview already updated
+      }
+    })()
+  }, [selectedAvatarItemId, selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const loadInventory = useCallback(async () => {
     ensureLocalInventoryMigration(userId)
@@ -5086,6 +5217,13 @@ function App() {
     setSelectedAvatarItemId(null)
     saveAvatarItem(userId, null)
   }, [availableAvatarItems, inventoryLoaded, selectedAvatarItemId, userId])
+
+  useEffect(() => {
+    if (!inventoryLoaded || selectedHomeBackgroundId === 'none') return
+    if (availableHomeBackgrounds.some((background) => background.id === selectedHomeBackgroundId)) return
+    setSelectedHomeBackgroundId('none')
+    saveHomeBackground(userId, 'none')
+  }, [availableHomeBackgrounds, inventoryLoaded, selectedHomeBackgroundId, userId])
 
   const loadBusinessStatus = useCallback(async () => {
     const localBusiness = loadLocalBusiness(userId)
@@ -5602,10 +5740,7 @@ function App() {
         <ApartmentThemeModal
           selectedBackgroundId={selectedHomeBackgroundId}
           availableBackgrounds={availableHomeBackgrounds}
-          onSelectBackground={(backgroundId) => {
-            setSelectedHomeBackgroundId(backgroundId)
-            saveHomeBackground(userId, backgroundId)
-          }}
+          onSelectBackground={handleSelectHomeBackground}
           onClose={() => setIsApartmentThemeOpen(false)}
         />
       )}

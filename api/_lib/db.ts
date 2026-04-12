@@ -27,6 +27,7 @@ export type UserProfileInput = {
   displayName?: string | null
   avatarModel?: string | null
   avatarItem?: string | null
+  homeBackground?: string | null
 }
 
 function isAnonymousUserId(userId: string): boolean {
@@ -41,6 +42,26 @@ function normalizeOptionalText(value?: string | null): string | null {
 
 function isTimedInventoryCard(cardId: string): boolean {
   return cardId === HUGE_BOUQUET_CARD_ID
+}
+
+function normalizeHomeBackground(value?: string | null): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return ['apartment_sunrise', 'apartment_midnight', 'skyline_studio'].includes(trimmed)
+    ? trimmed
+    : null
+}
+
+function getHomeBackgroundRequiredCardId(backgroundId: string): string | null {
+  switch (backgroundId) {
+    case 'apartment_sunrise':
+    case 'apartment_midnight':
+      return 'asset_apartment'
+    case 'skyline_studio':
+      return 'asset_skyline_studio'
+    default:
+      return null
+  }
 }
 
 function isConcurrentCreateRaceError(error: unknown, relationName: string): boolean {
@@ -221,6 +242,7 @@ async function ensureSchemaOnce() {
   await query`alter table users add column if not exists last_pack_opened_at timestamptz;`
   await query`alter table users add column if not exists avatar_model text;`
   await query`alter table users add column if not exists avatar_item text;`
+  await query`alter table users add column if not exists home_background text;`
   await query`update users set avatar_model = 'classic' where avatar_model is null;`
   await query`alter table users alter column avatar_model set default 'classic';`
 
@@ -441,10 +463,12 @@ export async function upsertUserProfile(input: UserProfileInput) {
   const avatarModel = normalizeOptionalText(input.avatarModel)
   const avatarItemProvided = Object.prototype.hasOwnProperty.call(input, 'avatarItem')
   const avatarItem = avatarItemProvided ? normalizeOptionalText(input.avatarItem) : null
+  const homeBackgroundProvided = Object.prototype.hasOwnProperty.call(input, 'homeBackground')
+  const homeBackground = homeBackgroundProvided ? normalizeHomeBackground(input.homeBackground) : null
 
   await sql`
-    insert into users (tg_user_id, username, display_name, avatar_model, avatar_item)
-    values (${input.userId}, ${username}, ${displayName}, coalesce(${avatarModel}, 'classic'), ${avatarItem})
+    insert into users (tg_user_id, username, display_name, avatar_model, avatar_item, home_background)
+    values (${input.userId}, ${username}, ${displayName}, coalesce(${avatarModel}, 'classic'), ${avatarItem}, ${homeBackground})
     on conflict (tg_user_id) do update
     set username = coalesce(excluded.username, users.username),
         display_name = coalesce(excluded.display_name, users.display_name),
@@ -452,6 +476,10 @@ export async function upsertUserProfile(input: UserProfileInput) {
         avatar_item = case
           when ${avatarItemProvided} then ${avatarItem}
           else users.avatar_item
+        end,
+        home_background = case
+          when ${homeBackgroundProvided} then ${homeBackground}
+          else users.home_background
         end,
         updated_at = now();
   `
@@ -508,6 +536,10 @@ export async function migrateAnonymousUserData(previousUserId: string, nextUserI
     set avatar_item = case
           when target.avatar_item is null and source.avatar_item is not null then source.avatar_item
           else target.avatar_item
+        end,
+        home_background = case
+          when target.home_background is null and source.home_background is not null then source.home_background
+          else target.home_background
         end,
         updated_at = now()
     from users as source
@@ -639,6 +671,38 @@ export async function getUserById(userId: string) {
     }
   }
 
+  const { rows: backgroundRows } = await sql<{ home_background: string | null }>`
+    select home_background
+    from users
+    where tg_user_id = ${userId}
+    limit 1;
+  `
+
+  const currentHomeBackground = backgroundRows[0]?.home_background ?? null
+  if (currentHomeBackground) {
+    const requiredCardId = getHomeBackgroundRequiredCardId(currentHomeBackground)
+    const availableRows = requiredCardId
+      ? await sql<{ available: boolean }>`
+          select exists(
+            select 1
+            from inventory
+            where user_id = ${userId}
+              and card_id = ${requiredCardId}
+              and qty > 0
+          ) as available;
+        `
+      : { rows: [{ available: false }] }
+
+    if (!availableRows.rows[0]?.available) {
+      await sql`
+        update users
+        set home_background = null,
+            updated_at = now()
+        where tg_user_id = ${userId};
+      `
+    }
+  }
+
   const { rows } = await sql<{
     tg_user_id: string
     username: string | null
@@ -646,13 +710,15 @@ export async function getUserById(userId: string) {
     stars: string
     avatar_model: string | null
     avatar_item: string | null
+    home_background: string | null
   }>`
     select tg_user_id,
            username,
            display_name,
            stars::text as stars,
            coalesce(avatar_model, 'classic') as avatar_model,
-           avatar_item
+           avatar_item,
+           home_background
     from users
     where tg_user_id = ${userId}
     limit 1;

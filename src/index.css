@@ -88,63 +88,50 @@
 
 .friendProfileStage {
   position: relative;
-  min-height: 320px;
+  min-height: min(72vh, 620px);
   border-radius: 24px;
   overflow: hidden;
   border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
   background:
-    radial-gradient(circle at 50% 15%, rgba(255, 255, 255, 0.08), transparent 36%),
-    linear-gradient(180deg, #0d0d0d, #020202 72%);
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.08), transparent 34%),
+    rgba(0, 0, 0, 0.96);
 }
 
 .friendProfileStage.hasBackground {
-  background: #060606;
-}
-
-.friendProfileBackdrop,
-.friendProfileBackdropShade {
-  position: absolute;
-  inset: 0;
-}
-
-.friendProfileBackdrop {
-  background-size: cover;
-  background-position: center;
-  opacity: 0.92;
-}
-
-.friendProfileBackdropShade {
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.52) 56%, rgba(0, 0, 0, 0.72)),
-    radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.1) 56%, rgba(0, 0, 0, 0.36) 100%);
+  background: #050505;
+  box-shadow: 0 28px 56px rgba(0, 0, 0, 0.36);
 }
 
 .friendProfileAvatarWrap {
   position: relative;
-  z-index: 1;
-  min-height: 320px;
+  z-index: 4;
+  width: 100%;
+  min-height: min(72vh, 620px);
   display: grid;
-  place-items: end center;
-  padding: 28px 18px 0;
+  place-items: center;
+  padding: 36px 24px 64px;
+  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.34));
 }
 
 .friendProfilePlacedItem {
   position: absolute;
-  left: 8px;
-  bottom: 6px;
-  width: min(34vw, 132px);
+  left: 16px;
+  bottom: 12px;
+  width: min(36vw, 176px);
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
   transform-origin: 34% 84%;
   animation: home-item-sway 4.8s ease-in-out infinite;
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.34));
 }
 
 .friendProfileAvatarWrap .stickman {
   position: relative;
-  z-index: 2;
-  width: min(54vw, 220px);
-  max-width: 220px;
+  z-index: 4;
+  width: min(56vw, 240px);
+  max-width: 240px;
 }
 
 .friendProfileSummary {
@@ -255,7 +242,13 @@
   }
 
   .friendProfileAvatarWrap {
-    padding: 26px 16px 0;
+    padding: 26px 16px 54px;
+  }
+
+  .friendProfilePlacedItem {
+    left: 12px;
+    bottom: 10px;
+    width: min(34vw, 154px);
   }
 
   .friendProfileAvatarWrap .stickman {
@@ -328,7 +321,13 @@
   }
 
   .friendProfileAvatarWrap {
-    padding: 22px 12px 0;
+    padding: 22px 12px 48px;
+  }
+
+  .friendProfilePlacedItem {
+    left: 10px;
+    bottom: 10px;
+    width: min(36vw, 138px);
   }
 
   .friendProfileAvatarWrap .stickman {

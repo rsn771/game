@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Classic Stickman Preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #020202;
+        --fg: #f5f5f5;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.08), transparent 30%),
+          linear-gradient(180deg, #080808, #010101 78%);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .preview {
+        width: min(100%, 560px);
+        padding: 32px 20px;
+        display: grid;
+        gap: 18px;
+        justify-items: center;
+      }
+
+      .preview h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .preview p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.68);
+        font-size: 14px;
+        text-align: center;
+      }
+
+      .stage {
+        width: min(88vw, 360px);
+        aspect-ratio: 3 / 4;
+        border-radius: 32px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background:
+          radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.1), transparent 38%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
+          rgba(0, 0, 0, 0.84);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 28px 64px rgba(0, 0, 0, 0.42);
+        overflow: hidden;
+      }
+
+      .stickman {
+        width: min(56vw, 240px);
+        height: auto;
+        overflow: visible;
+      }
+
+      .stickmanPart {
+        fill: var(--fg);
+      }
+
+      .stickmanCut {
+        fill: var(--bg);
+      }
+
+      .stickmanFloat {
+        transform-origin: 120px 190px;
+        animation: stickman-float 2.4s ease-in-out infinite;
+      }
+
+      .stickmanHead {
+        transform-box: fill-box;
+        transform-origin: 50% 60%;
+        animation: stickman-head 2.4s ease-in-out infinite;
+      }
+
+      .stickmanArmLeft,
+      .stickmanArmRight,
+      .stickmanLegLeft,
+      .stickmanLegRight {
+        transform-box: fill-box;
+      }
+
+      .stickmanArmLeft {
+        transform-origin: 60% 20%;
+        animation: stickman-arm-left 1.6s ease-in-out infinite;
+      }
+
+      .stickmanArmRight {
+        transform-origin: 40% 20%;
+        animation: stickman-arm-right 1.6s ease-in-out infinite;
+      }
+
+      .stickmanLegLeft {
+        transform-origin: 60% 10%;
+        animation: stickman-leg-left 2.4s ease-in-out infinite;
+      }
+
+      .stickmanLegRight {
+        transform-origin: 40% 10%;
+        animation: stickman-leg-right 2.4s ease-in-out infinite;
+      }
+
+      @keyframes stickman-float {
+        0%,
+        100% {
+          transform: translateY(0) rotate(-0.4deg);
+        }
+        50% {
+          transform: translateY(-6px) rotate(0.4deg);
+        }
+      }
+
+      @keyframes stickman-head {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-2px);
+        }
+      }
+
+      @keyframes stickman-arm-left {
+        0%,
+        100% {
+          transform: rotate(6deg);
+        }
+        50% {
+          transform: rotate(12deg);
+        }
+      }
+
+      @keyframes stickman-arm-right {
+        0%,
+        100% {
+          transform: rotate(-6deg);
+        }
+        50% {
+          transform: rotate(-12deg);
+        }
+      }
+
+      @keyframes stickman-leg-left {
+        0%,
+        100% {
+          transform: rotate(-2deg);
+        }
+        50% {
+          transform: rotate(-6deg);
+        }
+      }
+
+      @keyframes stickman-leg-right {
+        0%,
+        100% {
+          transform: rotate(2deg);
+        }
+        50% {
+          transform: rotate(6deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="preview">
+      <h1>Стандартный человечек</h1>
+      <p>Отдельный локальный preview стандартной игровой модельки с родной анимацией.</p>
+
+      <div class="stage">
+        <svg
+          class="stickman"
+          viewBox="0 0 240 320"
+          role="img"
+          aria-label="Человечек"
+        >
+          <g class="stickmanFloat">
+            <g class="stickmanHead">
+              <circle class="stickmanPart" cx="120" cy="56" r="32" />
+              <circle class="stickmanCut" cx="109" cy="52" r="4.8" />
+              <circle class="stickmanCut" cx="131" cy="52" r="4.8" />
+              <rect class="stickmanCut" x="107" y="68" width="26" height="6" rx="3" />
+            </g>
+
+            <g transform="translate(0 -12) translate(90 120) rotate(20) scale(0.82 1) translate(-90 -120)">
+              <g class="stickmanArmLeft">
+                <path
+                  class="stickmanPart"
+                  d="
+                    M 92 108
+                    C 70 126 60 154 64 182
+                    C 68 212 92 224 104 206
+                    C 116 188 100 172 102 150
+                    C 104 128 116 118 128 112
+                    C 116 122 102 128 92 108
+                    Z
+                  "
+                />
+              </g>
+            </g>
+            <g transform="translate(0 -12) translate(150 120) rotate(-20) scale(0.82 1) translate(-150 -120)">
+              <g class="stickmanArmRight">
+                <path
+                  class="stickmanPart"
+                  d="
+                    M 148 108
+                    C 170 126 180 154 176 182
+                    C 172 212 148 224 136 206
+                    C 124 188 140 172 138 150
+                    C 136 128 124 118 112 112
+                    C 124 122 138 128 148 108
+                    Z
+                  "
+                />
+              </g>
+            </g>
+
+            <rect class="stickmanPart" x="92" y="97" width="56" height="22" rx="10" />
+            <rect class="stickmanPart" x="92" y="97" width="56" height="97" rx="26" />
+
+            <path
+              class="stickmanPart"
+              d="
+                M 92 168
+                L 148 168
+                C 148 184 150 190 150 192
+                Q 120 210 90 192
+                C 90 190 92 184 92 168
+                Z
+              "
+            />
+
+            <g transform="translate(8 0)">
+              <path
+                class="stickmanPart stickmanLegLeft"
+                d="
+                  M 90 192
+                  Q 116 176 142 192
+                  C 156 220 158 248 156 286
+                  C 154 308 134 314 120 298
+                  C 104 280 114 258 118 238
+                  C 124 210 106 198 90 192
+                  Z
+                "
+              />
+            </g>
+            <g transform="translate(-8 0)">
+              <path
+                class="stickmanPart stickmanLegRight"
+                d="
+                  M 150 192
+                  Q 124 176 98 192
+                  C 84 220 82 248 84 286
+                  C 86 308 106 314 120 298
+                  C 136 280 126 258 122 238
+                  C 116 210 134 198 150 192
+                  Z
+                "
+              />
+            </g>
+          </g>
+        </svg>
+      </div>
+    </main>
+  </body>
+</html>
