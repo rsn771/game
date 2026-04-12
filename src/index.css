@@ -113,6 +113,7 @@
   place-items: center;
   padding: 36px 24px 64px;
   filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.34));
+  pointer-events: none;
 }
 
 .friendProfilePlacedItem {
@@ -545,6 +546,7 @@ body {
   min-height: min(72vh, 620px);
   padding: 36px 24px 64px;
   filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.34));
+  pointer-events: none;
 }
 
 .homePlacedItem,
@@ -590,6 +592,9 @@ body {
   color: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
   cursor: pointer;
+  z-index: 6;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .homeScenePlusIcon {

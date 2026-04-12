@@ -2239,6 +2239,7 @@ function InventoryPanel({
   const lastDropTargetRef = useRef<string | null>(null)
   const autoScrollFrameRef = useRef<number | null>(null)
   const autoScrollSpeedRef = useRef(0)
+  const preventClickRef = useRef(false)
 
   const clearLongPress = useCallback(() => {
     if (!longPressRef.current) return
@@ -2358,6 +2359,7 @@ function InventoryPanel({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, item: InventoryItem) => {
       if (draggingItem || pointerIdRef.current !== null) return
+      preventClickRef.current = false
       downPosRef.current = { x: e.clientX, y: e.clientY }
       pointerPosRef.current = { x: e.clientX, y: e.clientY }
       pointerIdRef.current = e.pointerId
@@ -2372,6 +2374,7 @@ function InventoryPanel({
         const pointerId = pointerIdRef.current
         const nextItem = pendingItemRef.current
         if (pointerId === null || !nextItem) return
+        preventClickRef.current = true
         if (activeCardRef.current) {
           try {
             activeCardRef.current.setPointerCapture(pointerId)
@@ -2418,11 +2421,7 @@ function InventoryPanel({
       if (e.pointerId !== pointerIdRef.current) return
       clearLongPress()
       if (!draggingItem) {
-        const tappedItem = pendingItemRef.current
         cleanupPointerSession()
-        if (tappedItem) {
-          onItemTap?.(tappedItem)
-        }
         return
       }
       const targetId = dropTargetId
@@ -2496,11 +2495,18 @@ function InventoryPanel({
         {inventory.map((item) => (
           <div
             key={item.id}
-            className={`inventoryCard ${draggingItem?.id === item.id ? 'inventoryCardDragging' : ''} ${dropTargetId === item.id ? 'inventoryCardDropTarget' : ''}`}
-            role="listitem"
-            data-inventory-card-id={item.id}
-            onPointerDown={(e) => handlePointerDown(e, item)}
-          >
+          className={`inventoryCard ${draggingItem?.id === item.id ? 'inventoryCardDragging' : ''} ${dropTargetId === item.id ? 'inventoryCardDropTarget' : ''}`}
+          role="listitem"
+          data-inventory-card-id={item.id}
+          onPointerDown={(e) => handlePointerDown(e, item)}
+          onClick={() => {
+            if (preventClickRef.current || draggingItem) {
+              preventClickRef.current = false
+              return
+            }
+            onItemTap?.(item)
+          }}
+        >
             <div className="inventoryThumb" aria-hidden="true">
               <ChromaKeyImage
                 className="inventoryThumbImg"
@@ -5284,7 +5290,7 @@ function App() {
   const [packOpening, setPackOpening] = useState(false)
   const [packNotice, setPackNotice] = useState<string | null>(null)
   const [packNow, setPackNow] = useState(() => Date.now())
-  const [stars, setStars] = useState('0')
+  const [stars, setStars] = useState(() => getFallbackStars(userId))
   const [businessMode, setBusinessMode] = useState<BusinessMode>('none')
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(() => loadLocalBusiness(userId))
   const [selectedAvatarModelId, setSelectedAvatarModelId] = useState<AvatarModelId>(() => loadAvatarModel(userId))
@@ -5354,7 +5360,7 @@ function App() {
     saveAvatarItem(userId, nextAvatarItem)
     setOwnedAvatarFaceIds(nextUnlockedFaces)
     saveUnlockedAvatarFaces(userId, nextUnlockedFaces)
-    setHomeSceneItems(nextSceneItems)
+    setHomeSceneItems((current) => isSameHomeSceneItems(current, nextSceneItems) ? current : nextSceneItems)
     saveHomeSceneItems(userId, nextSceneItems)
     setSelectedHomeBackgroundId(nextHomeBackground)
     saveHomeBackground(userId, nextHomeBackground)
@@ -5411,6 +5417,7 @@ function App() {
   useEffect(() => {
     setBusinessProfile(loadLocalBusiness(userId))
     setBusinessMode(loadLocalBusiness(userId) ? 'owner' : 'none')
+    setStars(getFallbackStars(userId))
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
     setSelectedAvatarModelId(loadAvatarModel(userId))
     setSelectedAvatarItemId(loadAvatarItem(userId))
@@ -5430,9 +5437,8 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isPackOpen])
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useEffectEvent(async () => {
     const fallbackStars = getFallbackStars(userId)
-    setStars(fallbackStars)
     try {
       const previousUserId = pendingMigrationUserIdRef.current
       const r = await fetch('/api/profile', {
@@ -5464,9 +5470,11 @@ function App() {
       applyProfileSnapshot(data, fallbackStars)
       pendingMigrationUserIdRef.current = null
     } catch {
-      setStars(fallbackStars)
+      if (!stars) {
+        setStars(fallbackStars)
+      }
     }
-  }, [applyProfileSnapshot, homeSceneItems, selectedAvatarFaceId, selectedAvatarItemId, selectedAvatarModelId, selectedHomeBackgroundId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  })
 
   const handleSelectAvatarModel = useCallback((modelId: AvatarModelId) => {
     setSelectedAvatarModelId(modelId)
@@ -5726,7 +5734,7 @@ function App() {
 
   useEffect(() => {
     void loadProfile()
-  }, [loadProfile])
+  }, [userId, telegramIdentity.username, telegramIdentity.displayName])
 
   const nextInventoryExpiryAt = useMemo(() => {
     let nextExpiry: number | null = null
@@ -5748,7 +5756,7 @@ function App() {
     }, Math.min(delay, 2_147_483_647))
 
     return () => window.clearTimeout(timeoutId)
-  }, [loadInventory, loadProfile, nextInventoryExpiryAt])
+  }, [loadInventory, nextInventoryExpiryAt, userId])
 
   useEffect(() => {
     if (!inventoryLoaded || !selectedAvatarItemId) return
