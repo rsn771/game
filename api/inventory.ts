@@ -23,12 +23,54 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
 
     await ensureUser(userId)
 
-    const { rows } = await sql<{ card_id: string; name: string; image_src: string; qty: number }>`
-      select i.card_id, c.name, c.image_src, i.qty
-      from inventory i
-      join cards c on c.id = i.card_id
-      where i.user_id = ${userId}
-      order by i.card_id asc;
+    await sql`
+      delete from inventory_timed
+      where user_id = ${userId}
+        and expires_at <= now();
+    `
+
+    const { rows } = await sql<{
+      instance_id: number | null
+      card_id: string
+      name: string
+      image_src: string
+      qty: number
+      expires_at: string | null
+      transferable: boolean
+    }>`
+      with permanent_items as (
+        select
+          null::bigint as instance_id,
+          i.card_id,
+          c.name,
+          c.image_src,
+          i.qty,
+          null::timestamptz as expires_at,
+          true as transferable
+        from inventory i
+        join cards c on c.id = i.card_id
+        where i.user_id = ${userId}
+      ),
+      timed_items as (
+        select
+          t.id as instance_id,
+          t.card_id,
+          c.name,
+          c.image_src,
+          1 as qty,
+          t.expires_at,
+          false as transferable
+        from inventory_timed t
+        join cards c on c.id = t.card_id
+        where t.user_id = ${userId}
+          and t.expires_at > now()
+      )
+      select *
+      from permanent_items
+      union all
+      select *
+      from timed_items
+      order by card_id asc, expires_at asc nulls last, instance_id asc nulls first;
     `
 
     sendJson(res, { items: rows })

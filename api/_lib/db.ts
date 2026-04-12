@@ -6,6 +6,7 @@ const BONUS_SEED_VERSION = 1
 const SEARCHABLE_USER_IDS = ['7519207725', '728379071'] as const
 const INVENTORY_RESET_VERSION = 2
 const BUSINESS_SLOT_COUNT = 6
+const HUGE_BOUQUET_CARD_ID = 'rose_bouquet_huge'
 const LEGACY_PACK_CARD_IDS = [
   'rose_red',
   'rose_white',
@@ -25,6 +26,7 @@ export type UserProfileInput = {
   username?: string | null
   displayName?: string | null
   avatarModel?: string | null
+  avatarItem?: string | null
 }
 
 function isAnonymousUserId(userId: string): boolean {
@@ -35,6 +37,10 @@ function normalizeOptionalText(value?: string | null): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function isTimedInventoryCard(cardId: string): boolean {
+  return cardId === HUGE_BOUQUET_CARD_ID
 }
 
 function isConcurrentCreateRaceError(error: unknown, relationName: string): boolean {
@@ -128,6 +134,14 @@ async function seedCards(query: SqlRunner) {
     set name = excluded.name,
         image_src = excluded.image_src;
   `
+
+  await query`
+    insert into cards (id, name, image_src)
+    values (${HUGE_BOUQUET_CARD_ID}, 'Огромный букет красных роз', '/card-rose-bouquet-huge.png')
+    on conflict (id) do update
+    set name = excluded.name,
+        image_src = excluded.image_src;
+  `
 }
 
 async function seedBonusUser(query: SqlRunner) {
@@ -206,6 +220,7 @@ async function ensureSchemaOnce() {
   await query`alter table users add column if not exists display_name text;`
   await query`alter table users add column if not exists last_pack_opened_at timestamptz;`
   await query`alter table users add column if not exists avatar_model text;`
+  await query`alter table users add column if not exists avatar_item text;`
   await query`update users set avatar_model = 'classic' where avatar_model is null;`
   await query`alter table users alter column avatar_model set default 'classic';`
 
@@ -223,6 +238,16 @@ async function ensureSchemaOnce() {
       card_id text not null references cards(id),
       qty integer not null default 1,
       primary key (user_id, card_id)
+    );
+  `
+
+  await query`
+    create table if not exists inventory_timed (
+      id bigserial primary key,
+      user_id text not null references users(tg_user_id) on delete cascade,
+      card_id text not null references cards(id),
+      expires_at timestamptz not null,
+      created_at timestamptz not null default now()
     );
   `
 
@@ -373,6 +398,16 @@ async function ensureSchemaOnce() {
   `
 
   await query`
+    create index if not exists inventory_timed_user_expires_idx
+    on inventory_timed (user_id, expires_at asc);
+  `
+
+  await query`
+    create index if not exists inventory_timed_user_card_idx
+    on inventory_timed (user_id, card_id);
+  `
+
+  await query`
     create unique index if not exists business_join_requests_pending_pair_idx
     on business_join_requests (owner_user_id, requester_user_id)
     where status = 'pending';
@@ -404,14 +439,20 @@ export async function upsertUserProfile(input: UserProfileInput) {
   const username = normalizeOptionalText(input.username)
   const displayName = normalizeOptionalText(input.displayName)
   const avatarModel = normalizeOptionalText(input.avatarModel)
+  const avatarItemProvided = Object.prototype.hasOwnProperty.call(input, 'avatarItem')
+  const avatarItem = avatarItemProvided ? normalizeOptionalText(input.avatarItem) : null
 
   await sql`
-    insert into users (tg_user_id, username, display_name, avatar_model)
-    values (${input.userId}, ${username}, ${displayName}, coalesce(${avatarModel}, 'classic'))
+    insert into users (tg_user_id, username, display_name, avatar_model, avatar_item)
+    values (${input.userId}, ${username}, ${displayName}, coalesce(${avatarModel}, 'classic'), ${avatarItem})
     on conflict (tg_user_id) do update
     set username = coalesce(excluded.username, users.username),
         display_name = coalesce(excluded.display_name, users.display_name),
         avatar_model = coalesce(${avatarModel}, users.avatar_model),
+        avatar_item = case
+          when ${avatarItemProvided} then ${avatarItem}
+          else users.avatar_item
+        end,
         updated_at = now();
   `
 }
@@ -447,6 +488,31 @@ export async function migrateAnonymousUserData(previousUserId: string, nextUserI
   await sql`
     delete from inventory
     where user_id = ${previousUserId};
+  `
+
+  await sql`
+    insert into inventory_timed (user_id, card_id, expires_at, created_at)
+    select ${nextUserId}, card_id, expires_at, created_at
+    from inventory_timed
+    where user_id = ${previousUserId}
+      and expires_at > now();
+  `
+
+  await sql`
+    delete from inventory_timed
+    where user_id = ${previousUserId};
+  `
+
+  await sql`
+    update users as target
+    set avatar_item = case
+          when target.avatar_item is null and source.avatar_item is not null then source.avatar_item
+          else target.avatar_item
+        end,
+        updated_at = now()
+    from users as source
+    where target.tg_user_id = ${nextUserId}
+      and source.tg_user_id = ${previousUserId};
   `
 
   await sql`
@@ -528,14 +594,65 @@ export async function migrateAnonymousUserData(previousUserId: string, nextUserI
 
 export async function getUserById(userId: string) {
   await ensureSchema()
+  await sql`
+    delete from inventory_timed
+    where user_id = ${userId}
+      and expires_at <= now();
+  `
+
+  const { rows: avatarRows } = await sql<{ avatar_item: string | null }>`
+    select avatar_item
+    from users
+    where tg_user_id = ${userId}
+    limit 1;
+  `
+
+  const currentAvatarItem = avatarRows[0]?.avatar_item ?? null
+  if (currentAvatarItem) {
+    const { rows: availabilityRows } = isTimedInventoryCard(currentAvatarItem)
+      ? await sql<{ available: boolean }>`
+          select exists(
+            select 1
+            from inventory_timed
+            where user_id = ${userId}
+              and card_id = ${currentAvatarItem}
+              and expires_at > now()
+          ) as available;
+        `
+      : await sql<{ available: boolean }>`
+          select exists(
+            select 1
+            from inventory
+            where user_id = ${userId}
+              and card_id = ${currentAvatarItem}
+              and qty > 0
+          ) as available;
+        `
+
+    if (!availabilityRows[0]?.available) {
+      await sql`
+        update users
+        set avatar_item = null,
+            updated_at = now()
+        where tg_user_id = ${userId};
+      `
+    }
+  }
+
   const { rows } = await sql<{
     tg_user_id: string
     username: string | null
     display_name: string | null
     stars: string
     avatar_model: string | null
+    avatar_item: string | null
   }>`
-    select tg_user_id, username, display_name, stars::text as stars, coalesce(avatar_model, 'classic') as avatar_model
+    select tg_user_id,
+           username,
+           display_name,
+           stars::text as stars,
+           coalesce(avatar_model, 'classic') as avatar_model,
+           avatar_item
     from users
     where tg_user_id = ${userId}
     limit 1;

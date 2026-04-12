@@ -21,6 +21,7 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
           username?: string | null
           displayName?: string | null
           avatarModel?: string | null
+          avatarItem?: string | null
         }
       | null
     >(req)
@@ -39,6 +40,7 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
       username: body?.username,
       displayName: body?.displayName,
       avatarModel: body?.avatarModel,
+      avatarItem: body?.avatarItem,
     })
 
     const profile = await getUserById(userId)
@@ -53,6 +55,7 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
       displayName: profile.display_name,
       stars: profile.stars,
       avatarModel: profile.avatar_model ?? 'classic',
+      avatarItem: profile.avatar_item ?? null,
     })
     return
   }
@@ -82,5 +85,6 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
     displayName: profile.display_name,
     stars: profile.stars,
     avatarModel: profile.avatar_model ?? 'classic',
+    avatarItem: profile.avatar_item ?? null,
   })
 }

@@ -9,6 +9,8 @@ type InventoryItem = {
   cardId: string
   name: string
   imageSrc: string
+  expiresAt: number | null
+  transferable: boolean
 }
 
 type FriendRelation = 'self' | 'none' | 'friend' | 'incoming' | 'outgoing'
@@ -44,6 +46,15 @@ type AvatarModelDef = {
   id: AvatarModelId
   name: string
   description: string
+}
+
+type AvatarItemId = 'rose_bouquet_huge'
+
+type AvatarItemDef = {
+  id: AvatarItemId
+  name: string
+  description: string
+  imageSrc: string
 }
 
 type HomeBackgroundId = 'none' | 'apartment_sunrise' | 'apartment_midnight' | 'skyline_studio'
@@ -186,6 +197,7 @@ type PublicUserProfile = {
   displayName: string | null
   stars: string
   avatarModel: AvatarModelId
+  avatarItem: AvatarItemId | null
 }
 
 type FriendProfileState = {
@@ -237,8 +249,11 @@ const SEEDED_STAR_BALANCES: Record<string, string> = {
 
 const APARTMENT_CARD_ID = 'asset_apartment'
 const SKYLINE_STUDIO_CARD_ID = 'asset_skyline_studio'
+const HUGE_BOUQUET_CARD_ID: AvatarItemId = 'rose_bouquet_huge'
 const APARTMENT_SHOP_PRICE = 10_000
 const SKYLINE_STUDIO_SHOP_PRICE = 50_000
+const HUGE_BOUQUET_SHOP_PRICE = 10_000
+const HUGE_BOUQUET_DURATION_MS = 48 * 60 * 60 * 1000
 const BUSINESS_OPEN_COST = 100_000
 const BUSINESS_START_CAPITAL = 80_000
 const BUSINESS_CLICK_DOUBLE_THRESHOLD = 150_000
@@ -307,6 +322,15 @@ const AVATAR_MODELS: AvatarModelDef[] = [
   },
 ]
 
+const AVATAR_ITEMS: AvatarItemDef[] = [
+  {
+    id: HUGE_BOUQUET_CARD_ID,
+    name: 'Огромный букет красных роз',
+    description: 'Появляется на домашней сцене в левом нижнем углу и доступен 48 часов с момента покупки.',
+    imageSrc: '/card-rose-bouquet-huge.png',
+  },
+]
+
 const NIGHT_LOFT_STARS: NightStarDef[] = [
   { left: '22%', top: '18%', size: 3, delay: '0s', duration: '2.1s', opacity: 0.78 },
   { left: '28%', top: '28%', size: 2, delay: '0.4s', duration: '1.8s', opacity: 0.62 },
@@ -367,6 +391,7 @@ const PACK_CARDS: CardDef[] = [
 const ALL_CARDS: CardDef[] = [
   { id: APARTMENT_CARD_ID, name: 'Квартира', imageSrc: '/home-bg-apartment-sunrise.svg' },
   { id: SKYLINE_STUDIO_CARD_ID, name: 'Ночная skyline-студия', imageSrc: '/home-bg-apartment-skyline.svg' },
+  { id: HUGE_BOUQUET_CARD_ID, name: 'Огромный букет красных роз', imageSrc: '/card-rose-bouquet-huge.png' },
   ...PACK_CARDS,
   { id: 'rose_2red', name: '2 красные розы', imageSrc: '/card-rose-2red.png' },
   { id: 'rose_bouquet', name: 'Букет красных роз', imageSrc: '/card-rose-bouquet.png' },
@@ -469,6 +494,11 @@ function getRelationLabel(relation: FriendRelation): string {
 }
 
 type LocalInventory = Record<string, number>
+type LocalTimedInventoryItem = {
+  id: string
+  cardId: string
+  expiresAt: number
+}
 
 function loadLocalInventory(userId: string): LocalInventory {
   try {
@@ -488,6 +518,51 @@ function saveLocalInventory(userId: string, inv: LocalInventory) {
   } catch {
     // ignore
   }
+}
+
+function loadLocalTimedInventory(userId: string): LocalTimedInventoryItem[] {
+  try {
+    const raw = localStorage.getItem(`timed_inventory_${userId}`)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    const now = Date.now()
+    const cleaned = parsed
+      .filter((entry): entry is LocalTimedInventoryItem => (
+        Boolean(entry)
+        && typeof entry === 'object'
+        && typeof (entry as LocalTimedInventoryItem).id === 'string'
+        && typeof (entry as LocalTimedInventoryItem).cardId === 'string'
+        && Number.isFinite((entry as LocalTimedInventoryItem).expiresAt)
+      ))
+      .filter((entry) => entry.expiresAt > now)
+
+    if (cleaned.length !== parsed.length) {
+      saveLocalTimedInventory(userId, cleaned)
+    }
+
+    return cleaned
+  } catch {
+    return []
+  }
+}
+
+function saveLocalTimedInventory(userId: string, items: LocalTimedInventoryItem[]) {
+  try {
+    localStorage.setItem(`timed_inventory_${userId}`, JSON.stringify(items))
+  } catch {
+    // ignore
+  }
+}
+
+function addLocalTimedInventoryItem(userId: string, cardId: string, expiresAt: number) {
+  const items = loadLocalTimedInventory(userId)
+  items.push({
+    id: crypto.randomUUID(),
+    cardId,
+    expiresAt,
+  })
+  saveLocalTimedInventory(userId, items)
 }
 
 function upsertLocalCard(userId: string, cardId: string, qty: number) {
@@ -591,8 +666,18 @@ function resolveAvatarModelId(value: string | null | undefined): AvatarModelId {
     : 'classic'
 }
 
+function resolveAvatarItemId(value: string | null | undefined): AvatarItemId | null {
+  return AVATAR_ITEMS.some((item) => item.id === value)
+    ? (value as AvatarItemId)
+    : null
+}
+
 function getAvatarModelById(modelId: AvatarModelId): AvatarModelDef {
   return AVATAR_MODELS.find((model) => model.id === modelId) ?? AVATAR_MODELS[0]
+}
+
+function getAvatarItemById(itemId: AvatarItemId | null | undefined): AvatarItemDef | null {
+  return AVATAR_ITEMS.find((item) => item.id === itemId) ?? null
 }
 
 function loadAvatarModel(userId: string): AvatarModelId {
@@ -607,6 +692,27 @@ function loadAvatarModel(userId: string): AvatarModelId {
 function saveAvatarModel(userId: string, modelId: AvatarModelId) {
   try {
     localStorage.setItem(`avatar_model_${userId}`, modelId)
+  } catch {
+    // ignore
+  }
+}
+
+function loadAvatarItem(userId: string): AvatarItemId | null {
+  try {
+    const raw = localStorage.getItem(`avatar_item_${userId}`)
+    return resolveAvatarItemId(raw)
+  } catch {
+    return null
+  }
+}
+
+function saveAvatarItem(userId: string, itemId: AvatarItemId | null) {
+  try {
+    if (!itemId) {
+      localStorage.removeItem(`avatar_item_${userId}`)
+      return
+    }
+    localStorage.setItem(`avatar_item_${userId}`, itemId)
   } catch {
     // ignore
   }
@@ -643,6 +749,11 @@ function getHomeBackgroundById(backgroundId: HomeBackgroundId): HomeBackgroundDe
 function getOwnedHomeBackgrounds(inventory: InventoryItem[]): HomeBackgroundDef[] {
   const ownedCardIds = new Set(inventory.map((item) => item.cardId))
   return HOME_BACKGROUNDS.filter((background) => ownedCardIds.has(background.requiredCardId))
+}
+
+function getAvailableAvatarItems(inventory: InventoryItem[]): AvatarItemDef[] {
+  const ownedCardIds = new Set(inventory.map((item) => item.cardId))
+  return AVATAR_ITEMS.filter((item) => ownedCardIds.has(item.id))
 }
 
 function loadHomeBackground(userId: string): HomeBackgroundId {
@@ -1759,6 +1870,23 @@ function Stickman({ modelId = 'classic' }: { modelId?: AvatarModelId }) {
   return <ClassicStickman />
 }
 
+function SceneAvatarItem({
+  itemId,
+  className,
+}: {
+  itemId: AvatarItemId | null
+  className?: string
+}) {
+  const item = getAvatarItemById(itemId)
+  if (!item) return null
+
+  return (
+    <div className={className} aria-hidden="true">
+      <ChromaKeyImage className="sceneAvatarItemImg" src={item.imageSrc} alt="" />
+    </div>
+  )
+}
+
 const LONG_PRESS_MS = 420
 const LONG_PRESS_MOVE_PX = 12
 const AUTO_SCROLL_EDGE_PX = 72
@@ -2088,6 +2216,7 @@ function InventoryPanel({
 function getTransferableCards(inventory: InventoryItem[]): { cardId: string; name: string; imageSrc: string; count: number }[] {
   const grouped = new Map<string, { cardId: string; name: string; imageSrc: string; count: number }>()
   for (const item of inventory) {
+    if (!item.transferable) continue
     const existing = grouped.get(item.cardId)
     if (existing) {
       existing.count += 1
@@ -2500,6 +2629,10 @@ function FriendsPanel({
                     </>
                   )}
                   <div className="friendProfileAvatarWrap">
+                    <SceneAvatarItem
+                      itemId={resolveAvatarItemId(profileState?.profile?.avatarItem)}
+                      className="friendProfilePlacedItem"
+                    />
                     <Stickman modelId={resolveAvatarModelId(profileState?.profile?.avatarModel)} />
                   </div>
                 </div>
@@ -2620,12 +2753,18 @@ function saveCustomizeCategory(userId: string, categoryId: CustomizeCategoryId) 
 
 function CustomizePanel({
   userId,
+  inventory,
   selectedAvatarModelId,
+  selectedAvatarItemId,
   onSelectAvatarModel,
+  onSelectAvatarItem,
 }: {
   userId: string
+  inventory: InventoryItem[]
   selectedAvatarModelId: AvatarModelId
+  selectedAvatarItemId: AvatarItemId | null
   onSelectAvatarModel: (modelId: AvatarModelId) => void
+  onSelectAvatarItem: (itemId: AvatarItemId | null) => void
 }) {
   const [activeCategoryId, setActiveCategoryId] = useState<CustomizeCategoryId>(() => loadCustomizeCategory(userId))
 
@@ -2638,7 +2777,13 @@ function CustomizePanel({
   }, [activeCategoryId, userId])
   const activeCategory = CUSTOMIZE_CATEGORIES.find((category) => category.id === activeCategoryId) ?? CUSTOMIZE_CATEGORIES[0]
   const selectedAvatarModel = getAvatarModelById(selectedAvatarModelId)
+  const selectedAvatarItem = getAvatarItemById(selectedAvatarItemId)
   const showModelPicker = activeCategory.id === 'build'
+  const showItemPicker = activeCategory.id === 'item'
+  const availableAvatarItems = useMemo(
+    () => getAvailableAvatarItems(inventory),
+    [inventory],
+  )
 
   return (
     <section className="panel customizePanel">
@@ -2719,7 +2864,63 @@ function CustomizePanel({
         </div>
       )}
 
-      <p className="customizeSubnote">Темы квартиры и другие активы остаются в инвентаре через предметы.</p>
+      {showItemPicker && (
+        availableAvatarItems.length > 0 ? (
+          <div className="customizeGrid">
+            <button
+              type="button"
+              className={`backgroundCard customizeItemCard ${selectedAvatarItemId === null ? 'isActive' : ''}`}
+              onClick={() => onSelectAvatarItem(null)}
+              aria-pressed={selectedAvatarItemId === null}
+            >
+              <div className="customizeItemPreview customizeItemPreview--empty" aria-hidden="true">
+                <span className="customizeItemPreviewEmpty">Без предмета</span>
+              </div>
+              <div className="backgroundMeta">
+                <div className="backgroundNameRow">
+                  <span className="backgroundName">Без предмета</span>
+                  {selectedAvatarItemId === null && <span className="backgroundBadge">Выбрано</span>}
+                </div>
+                <span className="backgroundDescription">Убирает предмет с домашней сцены.</span>
+              </div>
+            </button>
+
+            {availableAvatarItems.map((item) => {
+              const isActive = item.id === selectedAvatarItemId
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`backgroundCard customizeItemCard ${isActive ? 'isActive' : ''}`}
+                  onClick={() => onSelectAvatarItem(item.id)}
+                  aria-pressed={isActive}
+                >
+                  <div className="customizeItemPreview" aria-hidden="true">
+                    <ChromaKeyImage className="customizeItemPreviewImg" src={item.imageSrc} alt="" />
+                  </div>
+                  <div className="backgroundMeta">
+                    <div className="backgroundNameRow">
+                      <span className="backgroundName">{item.name}</span>
+                      {isActive && <span className="backgroundBadge">Выбрано</span>}
+                    </div>
+                    <span className="backgroundDescription">{item.description}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="customizeLocked">
+            В магазине пока нет активных предметов для этой сцены. Купите аксессуар, и он появится здесь.
+          </div>
+        )
+      )}
+
+      <p className="customizeSubnote">
+        {selectedAvatarItem
+          ? `${selectedAvatarItem.name} сейчас выбран для домашней сцены.`
+          : 'Темы квартиры и другие активы остаются в инвентаре через предметы.'}
+      </p>
     </section>
   )
 }
@@ -3715,15 +3916,22 @@ function ShopPanel({
   const [notice, setNotice] = useState<string | null>(null)
   const [buyingItemId, setBuyingItemId] = useState<string | null>(null)
 
-  const handleBuyHomeItem = useCallback(async (
+  const handleBuyShopItem = useCallback(async (
     itemId: string,
     price: number,
     itemName: string,
     alreadyOwned: boolean,
+    options?: {
+      allowDuplicates?: boolean
+      timedDurationMs?: number
+    },
   ) => {
     if (buyingItemId) return
 
-    if (alreadyOwned) {
+    const allowDuplicates = options?.allowDuplicates ?? false
+    const timedDurationMs = options?.timedDurationMs ?? null
+
+    if (alreadyOwned && !allowDuplicates) {
       setNotice(`${itemName} уже есть в инвентаре`)
       return
     }
@@ -3751,15 +3959,27 @@ function ShopPanel({
       }
 
       await onInventoryReload()
-      setNotice(`${itemName} добавлена в инвентарь`)
+      setNotice(
+        timedDurationMs
+          ? `${itemName} добавлен на 48 часов`
+          : `${itemName} добавлена в инвентарь`,
+      )
     } catch {
       const currentStars = Number(stars)
       if (Number.isFinite(currentStars) && currentStars >= price) {
         const nextStars = String(currentStars - price)
-        upsertLocalCard(userId, itemId, 1)
+        if (timedDurationMs) {
+          addLocalTimedInventoryItem(userId, itemId, Date.now() + timedDurationMs)
+        } else {
+          upsertLocalCard(userId, itemId, 1)
+        }
         onStarsChange(nextStars)
         await onInventoryReload()
-        setNotice(`${itemName} куплена локально`)
+        setNotice(
+          timedDurationMs
+            ? `${itemName} куплен локально на 48 часов`
+            : `${itemName} куплена локально`,
+        )
       } else {
         setNotice('Недостаточно звёзд для покупки')
       }
@@ -3774,7 +3994,7 @@ function ShopPanel({
         <div className="shopPanelHeader">
           <div>
             <h3>Магазин</h3>
-            <p className="shopPanelHint">Здесь можно покупать жильё и ставить его на главную страницу через инвентарь.</p>
+            <p className="shopPanelHint">Здесь можно покупать жильё и временные предметы для домашней сцены.</p>
           </div>
           <button
             type="button"
@@ -3804,7 +4024,7 @@ function ShopPanel({
               <button
                 type="button"
                 className="shopBuyButton"
-                onClick={() => void handleBuyHomeItem(APARTMENT_CARD_ID, APARTMENT_SHOP_PRICE, 'Квартира', hasApartment)}
+                onClick={() => void handleBuyShopItem(APARTMENT_CARD_ID, APARTMENT_SHOP_PRICE, 'Квартира', hasApartment)}
                 disabled={buyingItemId !== null || hasApartment}
               >
                 {hasApartment ? 'Уже куплено' : buyingItemId === APARTMENT_CARD_ID ? 'Покупаем...' : 'Купить'}
@@ -3827,10 +4047,39 @@ function ShopPanel({
               <button
                 type="button"
                 className="shopBuyButton"
-                onClick={() => void handleBuyHomeItem(SKYLINE_STUDIO_CARD_ID, SKYLINE_STUDIO_SHOP_PRICE, 'Ночная skyline-студия', hasSkylineStudio)}
+                onClick={() => void handleBuyShopItem(SKYLINE_STUDIO_CARD_ID, SKYLINE_STUDIO_SHOP_PRICE, 'Ночная skyline-студия', hasSkylineStudio)}
                 disabled={buyingItemId !== null || hasSkylineStudio}
               >
                 {hasSkylineStudio ? 'Уже куплено' : buyingItemId === SKYLINE_STUDIO_CARD_ID ? 'Покупаем...' : 'Купить'}
+              </button>
+            </div>
+          </article>
+
+          <article className="shopCard">
+            <div className="shopCardArt" aria-hidden="true">
+              <ChromaKeyImage className="shopCardImg shopCardImg--contain" src="/card-rose-bouquet-huge.png" alt="" />
+            </div>
+            <div className="shopCardBody">
+              <div className="shopCardTitleRow">
+                <div className="shopCardTitle">Огромный букет красных роз</div>
+                <div className="shopCardPrice">{formatStars(String(HUGE_BOUQUET_SHOP_PRICE))}</div>
+              </div>
+              <p className="shopCardDescription">
+                Временный предмет для кастомизации. После покупки доступен в инвентаре и разделе «Предмет» 48 часов.
+              </p>
+              <button
+                type="button"
+                className="shopBuyButton"
+                onClick={() => void handleBuyShopItem(
+                  HUGE_BOUQUET_CARD_ID,
+                  HUGE_BOUQUET_SHOP_PRICE,
+                  'Огромный букет красных роз',
+                  false,
+                  { allowDuplicates: true, timedDurationMs: HUGE_BOUQUET_DURATION_MS },
+                )}
+                disabled={buyingItemId !== null}
+              >
+                {buyingItemId === HUGE_BOUQUET_CARD_ID ? 'Покупаем...' : 'Купить'}
               </button>
             </div>
           </article>
@@ -4508,6 +4757,7 @@ function App() {
   const [packClicks, setPackClicks] = useState(0)
   const [isExploding, setIsExploding] = useState(false)
   const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const [inventoryLoaded, setInventoryLoaded] = useState(false)
   const [didRewardThisOpen, setDidRewardThisOpen] = useState(false)
   const [rewardCard, setRewardCard] = useState<PackRewardResult | null>(null)
   const [packNextOpenAt, setPackNextOpenAt] = useState<number | null>(() => loadLocalPackNextOpenAt(userId))
@@ -4520,6 +4770,7 @@ function App() {
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(() => loadLocalBusiness(userId))
   const [selectedHomeBackgroundId, setSelectedHomeBackgroundId] = useState<HomeBackgroundId>(() => loadHomeBackground(userId))
   const [selectedAvatarModelId, setSelectedAvatarModelId] = useState<AvatarModelId>(() => loadAvatarModel(userId))
+  const [selectedAvatarItemId, setSelectedAvatarItemId] = useState<AvatarItemId | null>(() => loadAvatarItem(userId))
   const hasApartment = useMemo(
     () => inventory.some((item) => item.cardId === APARTMENT_CARD_ID),
     [inventory]
@@ -4531,6 +4782,14 @@ function App() {
   const availableHomeBackgrounds = useMemo(
     () => getOwnedHomeBackgrounds(inventory),
     [inventory]
+  )
+  const availableAvatarItems = useMemo(
+    () => getAvailableAvatarItems(inventory),
+    [inventory],
+  )
+  const activeAvatarItem = useMemo(
+    () => getAvatarItemById(selectedAvatarItemId),
+    [selectedAvatarItemId],
   )
   const activeHomeBackground = useMemo(
     () => {
@@ -4594,7 +4853,9 @@ function App() {
     setBusinessMode(loadLocalBusiness(userId) ? 'owner' : 'none')
     setSelectedHomeBackgroundId(loadHomeBackground(userId))
     setSelectedAvatarModelId(loadAvatarModel(userId))
+    setSelectedAvatarItemId(loadAvatarItem(userId))
     setPackNextOpenAt(loadLocalPackNextOpenAt(userId))
+    setInventoryLoaded(false)
   }, [userId])
 
   useEffect(() => {
@@ -4623,21 +4884,25 @@ function App() {
           username: telegramIdentity.username,
           displayName: telegramIdentity.displayName,
           avatarModel: selectedAvatarModelId,
+          avatarItem: selectedAvatarItemId,
         }),
       })
       if (!r.ok) return
-      const data = (await r.json()) as { userId: string; stars: string; avatarModel?: string | null }
+      const data = (await r.json()) as { userId: string; stars: string; avatarModel?: string | null; avatarItem?: string | null }
       const nextStars = typeof data.stars === 'string' ? data.stars : fallbackStars
       const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
+      const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
       setStars(nextStars)
       saveLocalStars(userId, nextStars)
       setSelectedAvatarModelId(nextAvatarModel)
       saveAvatarModel(userId, nextAvatarModel)
+      setSelectedAvatarItemId(nextAvatarItem)
+      saveAvatarItem(userId, nextAvatarItem)
       pendingMigrationUserIdRef.current = null
     } catch {
       setStars(fallbackStars)
     }
-  }, [selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [selectedAvatarItemId, selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const handleSelectAvatarModel = useCallback((modelId: AvatarModelId) => {
     setSelectedAvatarModelId(modelId)
@@ -4653,13 +4918,17 @@ function App() {
             username: telegramIdentity.username,
             displayName: telegramIdentity.displayName,
             avatarModel: modelId,
+            avatarItem: selectedAvatarItemId,
           }),
         })
         if (!r.ok) return
-        const data = (await r.json()) as { stars?: string; avatarModel?: string | null }
+        const data = (await r.json()) as { stars?: string; avatarModel?: string | null; avatarItem?: string | null }
         const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
+        const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
         setSelectedAvatarModelId(nextAvatarModel)
         saveAvatarModel(userId, nextAvatarModel)
+        setSelectedAvatarItemId(nextAvatarItem)
+        saveAvatarItem(userId, nextAvatarItem)
         if (typeof data.stars === 'string') {
           setStars(data.stars)
           saveLocalStars(userId, data.stars)
@@ -4668,7 +4937,42 @@ function App() {
         // local preview already updated
       }
     })()
-  }, [telegramIdentity.displayName, telegramIdentity.username, userId])
+  }, [selectedAvatarItemId, telegramIdentity.displayName, telegramIdentity.username, userId])
+
+  const handleSelectAvatarItem = useCallback((itemId: AvatarItemId | null) => {
+    setSelectedAvatarItemId(itemId)
+    saveAvatarItem(userId, itemId)
+
+    void (async () => {
+      try {
+        const r = await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            username: telegramIdentity.username,
+            displayName: telegramIdentity.displayName,
+            avatarModel: selectedAvatarModelId,
+            avatarItem: itemId,
+          }),
+        })
+        if (!r.ok) return
+        const data = (await r.json()) as { stars?: string; avatarModel?: string | null; avatarItem?: string | null }
+        const nextAvatarModel = resolveAvatarModelId(data.avatarModel)
+        const nextAvatarItem = resolveAvatarItemId(data.avatarItem)
+        setSelectedAvatarModelId(nextAvatarModel)
+        saveAvatarModel(userId, nextAvatarModel)
+        setSelectedAvatarItemId(nextAvatarItem)
+        saveAvatarItem(userId, nextAvatarItem)
+        if (typeof data.stars === 'string') {
+          setStars(data.stars)
+          saveLocalStars(userId, data.stars)
+        }
+      } catch {
+        // local preview already updated
+      }
+    })()
+  }, [selectedAvatarModelId, telegramIdentity.displayName, telegramIdentity.username, userId])
 
   const loadInventory = useCallback(async () => {
     ensureLocalInventoryMigration(userId)
@@ -4676,20 +4980,35 @@ function App() {
       const r = await fetch(`/api/inventory?userId=${encodeURIComponent(userId)}`)
       if (r.ok) {
         const data = (await r.json()) as {
-          items: { card_id: string; name: string; image_src: string; qty: number }[]
+          items: {
+            instance_id?: number | null
+            card_id: string
+            name: string
+            image_src: string
+            qty: number
+            expires_at?: string | null
+            transferable?: boolean
+          }[]
         }
         const flattened: InventoryItem[] = []
         for (const it of data.items ?? []) {
+          const expiresAt = typeof it.expires_at === 'string' ? Date.parse(it.expires_at) : null
+          const transferable = it.transferable !== false
           for (let i = 0; i < (it.qty ?? 1); i++) {
             flattened.push({
-              id: `${it.card_id}_${i}_${Math.random().toString(16).slice(2)}`,
+              id: it.instance_id != null
+                ? `${it.card_id}_${it.instance_id}`
+                : `${it.card_id}_${i}_${Math.random().toString(16).slice(2)}`,
               cardId: it.card_id,
               name: it.name,
               imageSrc: it.image_src,
+              expiresAt: Number.isFinite(expiresAt) ? expiresAt : null,
+              transferable,
             })
           }
         }
         setInventory(flattened)
+        setInventoryLoaded(true)
         return
       }
     } catch {
@@ -4707,10 +5026,28 @@ function App() {
           cardId: card.id,
           name: card.name,
           imageSrc: card.imageSrc,
+          expiresAt: null,
+          transferable: card.id !== HUGE_BOUQUET_CARD_ID,
         })
       }
     }
+
+    const timedItems = loadLocalTimedInventory(userId)
+    for (const timedItem of timedItems) {
+      const card = ALL_CARDS.find((candidate) => candidate.id === timedItem.cardId)
+      if (!card) continue
+      flattened.push({
+        id: `${timedItem.cardId}_${timedItem.id}`,
+        cardId: timedItem.cardId,
+        name: card.name,
+        imageSrc: card.imageSrc,
+        expiresAt: timedItem.expiresAt,
+        transferable: false,
+      })
+    }
+
     setInventory(flattened)
+    setInventoryLoaded(true)
   }, [userId])
 
   useEffect(() => {
@@ -4720,6 +5057,35 @@ function App() {
   useEffect(() => {
     void loadProfile()
   }, [loadProfile])
+
+  const nextInventoryExpiryAt = useMemo(() => {
+    let nextExpiry: number | null = null
+    for (const item of inventory) {
+      if (!item.expiresAt) continue
+      if (nextExpiry === null || item.expiresAt < nextExpiry) {
+        nextExpiry = item.expiresAt
+      }
+    }
+    return nextExpiry
+  }, [inventory])
+
+  useEffect(() => {
+    if (!nextInventoryExpiryAt) return
+    const delay = Math.max(250, nextInventoryExpiryAt - Date.now() + 800)
+    const timeoutId = window.setTimeout(() => {
+      void loadInventory()
+      void loadProfile()
+    }, Math.min(delay, 2_147_483_647))
+
+    return () => window.clearTimeout(timeoutId)
+  }, [loadInventory, loadProfile, nextInventoryExpiryAt])
+
+  useEffect(() => {
+    if (!inventoryLoaded || !selectedAvatarItemId) return
+    if (availableAvatarItems.some((item) => item.id === selectedAvatarItemId)) return
+    setSelectedAvatarItemId(null)
+    saveAvatarItem(userId, null)
+  }, [availableAvatarItems, inventoryLoaded, selectedAvatarItemId, userId])
 
   const loadBusinessStatus = useCallback(async () => {
     const localBusiness = loadLocalBusiness(userId)
@@ -4993,6 +5359,7 @@ function App() {
                   <div className="homeBackdropShade" aria-hidden="true" />
                 </>
               )}
+              <SceneAvatarItem itemId={activeAvatarItem?.id ?? null} className="homePlacedItem" />
               <div className="homeAvatarWrap">
                 <Stickman modelId={selectedAvatarModelId} />
               </div>
@@ -5103,8 +5470,11 @@ function App() {
         {tab === 'customize' && (
           <CustomizePanel
             userId={userId}
+            inventory={inventory}
             selectedAvatarModelId={selectedAvatarModelId}
+            selectedAvatarItemId={selectedAvatarItemId}
             onSelectAvatarModel={handleSelectAvatarModel}
+            onSelectAvatarItem={handleSelectAvatarItem}
           />
         )}
 

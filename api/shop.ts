@@ -14,14 +14,27 @@ export const config = {
 
 const APARTMENT_CARD_ID = 'asset_apartment'
 const SKYLINE_STUDIO_CARD_ID = 'asset_skyline_studio'
+const HUGE_BOUQUET_CARD_ID = 'rose_bouquet_huge'
 const APARTMENT_SHOP_PRICE = 10_000
+const HUGE_BOUQUET_SHOP_PRICE = 10_000
+const HUGE_BOUQUET_DURATION_MS = 48 * 60 * 60 * 1000
 
 const SHOP_ITEMS = {
   [APARTMENT_CARD_ID]: {
     price: APARTMENT_SHOP_PRICE,
+    allowDuplicates: false,
+    mode: 'inventory',
   },
   [SKYLINE_STUDIO_CARD_ID]: {
     price: 50_000,
+    allowDuplicates: false,
+    mode: 'inventory',
+  },
+  [HUGE_BOUQUET_CARD_ID]: {
+    price: HUGE_BOUQUET_SHOP_PRICE,
+    allowDuplicates: true,
+    mode: 'timed_inventory',
+    durationMs: HUGE_BOUQUET_DURATION_MS,
   },
 } as const
 
@@ -47,19 +60,21 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
   try {
     await client.query('begin')
 
-    const { rows: ownedRows } = await client.sql<{ qty: number }>`
-      select qty
-      from inventory
-      where user_id = ${userId}
-        and card_id = ${itemId}
-      limit 1
-      for update;
-    `
+    if (!itemConfig.allowDuplicates) {
+      const { rows: ownedRows } = await client.sql<{ qty: number }>`
+        select qty
+        from inventory
+        where user_id = ${userId}
+          and card_id = ${itemId}
+        limit 1
+        for update;
+      `
 
-    if ((ownedRows[0]?.qty ?? 0) > 0) {
-      await client.query('rollback')
-      sendJson(res, { error: 'Квартира уже куплена' }, 409)
-      return
+      if ((ownedRows[0]?.qty ?? 0) > 0) {
+        await client.query('rollback')
+        sendJson(res, { error: 'Этот товар уже куплен' }, 409)
+        return
+      }
     }
 
     const { rows: userRows } = await client.sql<{ stars: string }>`
@@ -77,15 +92,25 @@ export default async function handler(req: NodeApiRequest, res: NodeApiResponse)
       return
     }
 
-    await client.sql`
-      insert into inventory (user_id, card_id, qty)
-      values (${userId}, ${itemId}, 1)
-      on conflict (user_id, card_id)
-      do update set qty = inventory.qty + 1;
-    `
+    let expiresAt: string | null = null
+    if (itemConfig.mode === 'timed_inventory') {
+      const nextExpiresAt = new Date(Date.now() + itemConfig.durationMs)
+      expiresAt = nextExpiresAt.toISOString()
+      await client.sql`
+        insert into inventory_timed (user_id, card_id, expires_at)
+        values (${userId}, ${itemId}, ${nextExpiresAt.toISOString()});
+      `
+    } else {
+      await client.sql`
+        insert into inventory (user_id, card_id, qty)
+        values (${userId}, ${itemId}, 1)
+        on conflict (user_id, card_id)
+        do update set qty = inventory.qty + 1;
+      `
+    }
 
     await client.query('commit')
-    sendJson(res, { ok: true, stars: userRows[0].stars })
+    sendJson(res, { ok: true, stars: userRows[0].stars, expiresAt })
   } catch (error) {
     await client.query('rollback').catch(() => {})
     throw error
